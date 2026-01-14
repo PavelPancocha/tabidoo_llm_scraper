@@ -1,10 +1,10 @@
 # Tabidoo LLM Export CLI (Python)
 
-Standalone Python CLI that exports Tabidoo application context into LLM-ready files.
+Standalone Python CLI that exports Tabidoo application context into LLM-ready files with a rich, interactive UX.
 
 ## What it does
 
-1. Load `TABIDOO_FE_TOKEN` (FE JWT from the browser session) from a `.env` file placed next to the script (or from the process environment).
+1. Load `TABIDOO_FE_TOKEN` (FE JWT from the browser session) from a `.env` file in your working directory (or from the process environment).
 2. Validate the configuration and list accessible apps.
 3. Let you pick an app (or continue automatically if only one exists).
 4. Download:
@@ -34,6 +34,7 @@ Default output (overridable via CLI flags):
 - Dependencies (installed via `uv`):
   - `python-dotenv` (robust `.env` parsing)
   - `rich` (nicer interactive UI)
+  - `typer` (CLI UX and options)
 
 ## Quick start
 
@@ -43,25 +44,38 @@ Default output (overridable via CLI flags):
 uv sync
 ```
 
-1) Create `.env` next to the script:
+1) Create `.env` in your working directory:
 
 ```
 TABIDOO_FE_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-2) Run interactively:
+2) Run interactively (via UV):
 
 ```bash
-python tabidoo_llm_export.py
+uv run tabidoo-llm-export
 ```
 
-3) Non-interactive:
+3) Optional shortcut script (installs deps + runs the CLI):
 
 ```bash
-python tabidoo_llm_export.py --app-id <APP_ID> --out-dir ./out --yes
+./scripts/run.sh
 ```
 
-## CLI flags (planned)
+4) Non-interactive:
+
+```bash
+uv run tabidoo-llm-export --app-id <APP_ID> --out-dir ./out --yes
+```
+
+Alternative entry points:
+
+```bash
+uv run python -m tabidoo_llm_export
+uv run python tabidoo_llm_export.py
+```
+
+## CLI flags
 
 - `--app-id <id>`
   - Skip selection and export a specific app.
@@ -71,6 +85,10 @@ python tabidoo_llm_export.py --app-id <APP_ID> --out-dir ./out --yes
   - Do not prompt; fail if `--app-id` is missing and multiple apps exist.
 - `--base-url <url>`
   - Force API base URL (defaults to `https://app.tabidoo.cloud/api`).
+- `--language <code>`
+  - Language used in the `appinfo` header (default: `en`).
+- `--timeout <seconds>`
+  - HTTP timeout (default: 30).
 - `--verbose`
   - Print request/response info (never print the token).
 
@@ -115,7 +133,7 @@ Recommended exit codes:
 
 ## Implementation notes (for the agent building the script)
 
-- Keep it a single-file script.
+- Multi-file package for clarity (`tabidoo_llm_export/`).
 - Favor deterministic output names and ordering.
 - Keep HTTP helpers small and testable.
 - If base URL autodetection is added, validate against `/v2/users/me` and default to `https://app.tabidoo.cloud` when unspecified.
