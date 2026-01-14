@@ -22,10 +22,24 @@ import sys
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urljoin
 from urllib.request import Request, urlopen
+
+try:
+    from dotenv import load_dotenv as dotenv_load
+except ImportError:
+    dotenv_load = None
+
+try:
+    from rich.console import Console
+    from rich.prompt import Prompt
+    from rich.table import Table
+except ImportError:
+    Console = None
+    Prompt = None
+    Table = None
 
 DEFAULT_BASE_URL = "https://app.tabidoo.cloud"
 DEFAULT_TIMEOUT_SEC = 30
@@ -89,6 +103,10 @@ def load_dotenv(dotenv_path: Path) -> None:
     - supports quoted values
     - does not override existing process env
     """
+    if dotenv_load is not None:
+        dotenv_load(dotenv_path, override=False)
+        return
+
     if not dotenv_path.exists():
         return
 
@@ -568,13 +586,29 @@ def format_extracted_code_for_llm(
 # -------------------------
 
 def print_apps(apps: list[dict[str, Any]]) -> None:
-    print("\nAvailable apps:")
-    for idx, app in enumerate(apps, start=1):
-        app_id = str(app.get("id", ""))
-        name = str(app.get("name", ""))
-        internal = str(app.get("internalName", ""))
-        print(f"  {idx:>2}) {name} ({internal})  id={app_id}")
-    print()
+    if Console and Table:
+        console = Console()
+        table = Table(title="Available apps")
+        table.add_column("#", justify="right")
+        table.add_column("Name")
+        table.add_column("Internal")
+        table.add_column("ID")
+        for idx, app in enumerate(apps, start=1):
+            app_id = str(app.get("id", ""))
+            name = str(app.get("name", ""))
+            internal = str(app.get("internalName", ""))
+            table.add_row(str(idx), name, internal, app_id)
+        console.print()
+        console.print(table)
+        console.print()
+    else:
+        print("\nAvailable apps:")
+        for idx, app in enumerate(apps, start=1):
+            app_id = str(app.get("id", ""))
+            name = str(app.get("name", ""))
+            internal = str(app.get("internalName", ""))
+            print(f"  {idx:>2}) {name} ({internal})  id={app_id}")
+        print()
 
 
 def select_app_interactive(apps: list[dict[str, Any]]) -> dict[str, Any]:
@@ -586,7 +620,10 @@ def select_app_interactive(apps: list[dict[str, Any]]) -> dict[str, Any]:
 
     print_apps(apps)
     while True:
-        choice = input("Select app (number or app id): ").strip()
+        if Prompt:
+            choice = Prompt.ask("Select app (number or app id)").strip()
+        else:
+            choice = input("Select app (number or app id): ").strip()
         if not choice:
             continue
 
@@ -627,36 +664,20 @@ def write_outputs(
     *,
     out_dir: Path,
     app_meta: dict[str, Any],
-    base_url: str,
     tsd_content: str,
     llm_md: str,
-) -> tuple[Path, Path, Path]:
+) -> tuple[Path, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    app_id = str(app_meta.get("id", "unknown"))
     app_name = str(app_meta.get("name", ""))
-    internal = str(app_meta.get("internalName", "")) or app_name
-    folder = out_dir / f"{app_id}__{sanitize_for_fs(internal)}"
-    folder.mkdir(parents=True, exist_ok=True)
+    safe_name = sanitize_for_fs(app_name) or "app"
+    tsd_path = out_dir / f"{safe_name}-schema.txt"
+    llm_path = out_dir / f"{safe_name}-scripts.md"
 
-    meta_path = folder / "01_app_meta.json"
-    tsd_path = folder / "10_types.d.ts"
-    llm_path = folder / "20_llm_scripts.md"
-
-    meta_payload = {
-        "id": app_id,
-        "name": app_name,
-        "internalName": str(app_meta.get("internalName", "")),
-        "isMultiLanguage": app_meta.get("isMultiLanguage", None),
-        "namesI18n": app_meta.get("namesI18n", None),
-        "baseUrl": base_url,
-    }
-
-    meta_path.write_text(json.dumps(meta_payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
     tsd_path.write_text(tsd_content or "", encoding="utf-8")
     llm_path.write_text(llm_md or "", encoding="utf-8")
 
-    return meta_path, tsd_path, llm_path
+    return tsd_path, llm_path
 
 
 # -------------------------
@@ -753,17 +774,15 @@ def main(argv: list[str]) -> int:
     llm_md = format_extracted_code_for_llm(extracted, workflows=workflows, custom_scripts=custom_scripts)
 
     out_dir = Path(args.out_dir).expanduser().resolve()
-    meta_path, tsd_path, llm_path = write_outputs(
+    tsd_path, llm_path = write_outputs(
         out_dir=out_dir,
         app_meta=selected,
-        base_url=base_url,
         tsd_content=tsd,
         llm_md=llm_md,
     )
 
     print("Done.\n")
     print("Wrote:")
-    print(f"  - {meta_path}")
     print(f"  - {tsd_path}")
     print(f"  - {llm_path}")
     return 0

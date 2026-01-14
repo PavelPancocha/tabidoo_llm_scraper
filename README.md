@@ -17,28 +17,31 @@ Standalone Python CLI that exports Tabidoo application context into LLM-ready fi
 Default output (overridable via CLI flags):
 
 ```
-./out/<appId>__<appName>/
-01_app_meta.json
-10_types.d.ts
-20_llm_scripts.md
+./out/<app-name>-schema.txt
+./out/<app-name>-scripts.md
 ```
 
 ### File contents
 
-- `01_app_meta.json`
-  - App id, name, internalName (and base URL if captured)
-- `10_types.d.ts`
+- `<app-name>-schema.txt`
   - Raw TypeScript definition content
-- `20_llm_scripts.md`
+- `<app-name>-scripts.md`
   - Markdown bundle of app scripts prepared for LLM input
 
 ## Requirements
 
 - Python 3.11+ (3.10 should work if typing stays minimal)
-- Prefer standard library only
-  - If you add dependencies, keep them minimal and document them
+- Dependencies (installed via `uv`):
+  - `python-dotenv` (robust `.env` parsing)
+  - `rich` (nicer interactive UI)
 
 ## Quick start
+
+0) Install dependencies:
+
+```bash
+uv sync
+```
 
 1) Create `.env` next to the script:
 
