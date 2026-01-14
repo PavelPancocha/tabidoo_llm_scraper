@@ -10,3 +10,4 @@ wheels/
 .venv
 /synapto-services-main/
 .env
+/out/

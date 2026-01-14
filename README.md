@@ -4,7 +4,7 @@ Standalone Python CLI that exports Tabidoo application context into LLM-ready fi
 
 ## What it does
 
-1. Load `TABIDOO_API_KEY` from a `.env` file placed next to the script (or from the process environment).
+1. Load `TABIDOO_FE_TOKEN` (FE JWT from the browser session) from a `.env` file placed next to the script (or from the process environment).
 2. Validate the configuration and list accessible apps.
 3. Let you pick an app (or continue automatically if only one exists).
 4. Download:
@@ -17,14 +17,14 @@ Standalone Python CLI that exports Tabidoo application context into LLM-ready fi
 Default output (overridable via CLI flags):
 
 ```
-./out/<app-name>-schema.txt
+./out/<app-name>-schema.md
 ./out/<app-name>-scripts.md
 ```
 
 ### File contents
 
-- `<app-name>-schema.txt`
-  - Raw TypeScript definition content
+- `<app-name>-schema.md`
+  - TypeScript definitions wrapped in a Markdown code block
 - `<app-name>-scripts.md`
   - Markdown bundle of app scripts prepared for LLM input
 
@@ -46,7 +46,7 @@ uv sync
 1) Create `.env` next to the script:
 
 ```
-TABIDOO_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxx
+TABIDOO_FE_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 2) Run interactively:
@@ -70,7 +70,7 @@ python tabidoo_llm_export.py --app-id <APP_ID> --out-dir ./out --yes
 - `--yes` / `--no-interactive`
   - Do not prompt; fail if `--app-id` is missing and multiple apps exist.
 - `--base-url <url>`
-  - Force API base URL (useful if autodetection fails).
+  - Force API base URL (defaults to `https://app.tabidoo.cloud/api`).
 - `--verbose`
   - Print request/response info (never print the token).
 
@@ -81,7 +81,7 @@ The CLI talks directly to Tabidoo API endpoints:
 - `GET /v2/users/me` (token validation)
 - `GET /v2/apps`
 - `GET /v2/apps/{appId}`
-- `POST /application/getApplicationTypeScriptDefinition`
+- `POST /application/getApplicationTypeScriptDefinition` (requires FE JWT; mirrors FE headers and per-table `schemaId`)
 - `GET /v2/apps/{appId}/tables/customScripts/data` (optional)
 - `GET /v2/apps/{appId}/tables/wascenarios/data` (optional)
 
@@ -98,17 +98,18 @@ Recommended exit codes:
 
 ## Security notes
 
-- Never print the API key.
-- Never write the API key to disk.
+- Never print the token.
+- Never write the token to disk.
 - Redact auth headers in verbose logs.
 
 ## Troubleshooting
 
 - 401 / 403:
-  - Verify `TABIDOO_API_KEY` is correct and has access to the target apps.
+  - Verify `TABIDOO_FE_TOKEN` is correct and has access to the target apps.
+  - The script will exit if the `.d.ts` endpoint is unauthorized.
 - No apps returned:
   - The token might be scoped to a different instance or base URL.
-  - Try `--base-url` explicitly.
+- Try `--base-url` explicitly (use `https://app.tabidoo.cloud/api`).
 - Odd output folder names:
   - App names are sanitized for filesystem safety.
 

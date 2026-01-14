@@ -41,7 +41,7 @@ except ImportError:
     Prompt = None
     Table = None
 
-DEFAULT_BASE_URL = "https://app.tabidoo.cloud"
+DEFAULT_BASE_URL = "https://app.tabidoo.cloud/api"
 DEFAULT_TIMEOUT_SEC = 30
 
 
@@ -154,7 +154,19 @@ def normalize_base_url(value: str) -> str:
         raise InvalidConfigError("Base URL is empty.")
     if not value.startswith("http://") and not value.startswith("https://"):
         raise InvalidConfigError("Base URL must start with http:// or https://")
-    return value.rstrip("/")
+    value = value.rstrip("/")
+    if value.endswith("/api/v2"):
+        return value[: -len("/v2")]
+    if value.endswith("/api"):
+        return value
+    return f"{value}/api"
+
+
+def pick_token() -> tuple[str, str]:
+    token = os.environ.get("TABIDOO_FE_TOKEN", "").strip()
+    if token:
+        return token, "TABIDOO_FE_TOKEN"
+    raise InvalidConfigError("Missing TABIDOO_FE_TOKEN. Put it into .env next to the script.")
 
 
 # -------------------------
@@ -340,13 +352,21 @@ def get_typescript_definitions(
     language: str,
     timeout_sec: int,
     verbose: bool,
+    schema_id: str | None = None,
+    headers: dict[str, str] | None = None,
 ) -> str:
+    body: dict[str, Any] = {"onlyJsFunctions": False}
+    if schema_id:
+        body["schemaId"] = schema_id
+    req_headers = {"appinfo": build_appinfo_header(app_id, language=language)}
+    if headers:
+        req_headers.update(headers)
     payload = http_post_json(
         base_url=base_url,
         path="/application/getApplicationTypeScriptDefinition",
         token=token,
-        json_body={"onlyJsFunctions": False},
-        headers={"appinfo": build_appinfo_header(app_id, language=language)},
+        json_body=body,
+        headers=req_headers,
         timeout_sec=timeout_sec,
         verbose=verbose,
     )
@@ -356,6 +376,84 @@ def get_typescript_definitions(
     if isinstance(unwrapped, dict) and "content" in unwrapped and isinstance(unwrapped["content"], str):
         return unwrapped["content"]
     raise ApiError("Unexpected TypeScript definition response (missing 'content').")
+
+
+def get_typescript_definitions_for_app(
+    base_url: str,
+    token: str,
+    app_id: str,
+    language: str,
+    timeout_sec: int,
+    verbose: bool,
+    app_full: dict[str, Any],
+) -> str:
+    origin = base_url.rstrip("/")
+    if origin.endswith("/api"):
+        origin = origin[: -len("/api")]
+    app_internal = str(app_full.get("internalName", "")).strip()
+    accept_language = f"{language};q=0.6"
+
+    def tsd_headers(referer: str | None) -> dict[str, str]:
+        headers = {
+            "appinfo": build_appinfo_header(app_id, language=language),
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": accept_language,
+        }
+        if origin:
+            headers["Origin"] = origin
+        if referer:
+            headers["Referer"] = referer
+        return headers
+
+    tables = app_full.get("tables") if isinstance(app_full.get("tables"), list) else []
+    parts: list[str] = []
+    for table in tables:
+        if not isinstance(table, dict):
+            continue
+        schema_id = str(table.get("id", "")).strip()
+        if not schema_id:
+            continue
+        internal = str(table.get("internalNameApi", "")).strip() or "table"
+        header = f"// Table: {internal} ({schema_id})"
+        referer = None
+        if app_internal and origin:
+            referer = f"{origin}/app/{app_internal}/schema/{internal}"
+        try:
+            content = get_typescript_definitions(
+                base_url,
+                token,
+                app_id,
+                language=language,
+                timeout_sec=timeout_sec,
+                verbose=verbose,
+                schema_id=schema_id,
+                headers=tsd_headers(referer),
+            )
+        except CliError as exc:
+            eprint(f"Warning: failed .d.ts for table {internal} ({schema_id}): {exc}")
+            continue
+        if content:
+            parts.append(header)
+            parts.append(content.rstrip())
+
+    if parts:
+        return "\n\n".join(parts).rstrip() + "\n"
+    try:
+        return get_typescript_definitions(
+            base_url,
+            token,
+            app_id,
+            language=language,
+            timeout_sec=timeout_sec,
+            verbose=verbose,
+            headers=tsd_headers(None),
+        )
+    except CliError as exc:
+        raise ApiError("Unable to fetch TypeScript definitions for app or any table.") from exc
+
+
+def wrap_typescript_markdown(content: str) -> str:
+    return f"# TypeScript Definitions\n\n```typescript\n{content.rstrip()}\n```\n"
 
 
 def try_get_table_data(
@@ -671,10 +769,10 @@ def write_outputs(
 
     app_name = str(app_meta.get("name", ""))
     safe_name = sanitize_for_fs(app_name) or "app"
-    tsd_path = out_dir / f"{safe_name}-schema.txt"
+    tsd_path = out_dir / f"{safe_name}-schema.md"
     llm_path = out_dir / f"{safe_name}-scripts.md"
 
-    tsd_path.write_text(tsd_content or "", encoding="utf-8")
+    tsd_path.write_text(wrap_typescript_markdown(tsd_content or ""), encoding="utf-8")
     llm_path.write_text(llm_md or "", encoding="utf-8")
 
     return tsd_path, llm_path
@@ -714,9 +812,7 @@ def main(argv: list[str]) -> int:
     script_dir = Path(__file__).resolve().parent
     load_dotenv(script_dir / ".env")
 
-    token = os.environ.get("TABIDOO_API_KEY", "").strip()
-    if not token:
-        raise InvalidConfigError("Missing TABIDOO_API_KEY. Put it into .env next to the script.")
+    token, token_source = pick_token()
 
     args = parse_args(argv)
     base_url = normalize_base_url(args.base_url) if args.base_url else DEFAULT_BASE_URL
@@ -724,6 +820,7 @@ def main(argv: list[str]) -> int:
     user = verify_token(base_url, token, timeout_sec=args.timeout, verbose=args.verbose)
     user_email = user.get("email") if isinstance(user, dict) else None
     print(f"Using instance: {base_url}")
+    print(f"Using token: {token_source}")
     if user_email:
         print(f"Authenticated as: {user_email}")
 
@@ -738,18 +835,19 @@ def main(argv: list[str]) -> int:
 
     print(f"\nSelected app: {selected.get('name')} ({selected.get('internalName')}) id={app_id}\n")
 
+    print("Fetching app structure + workflows + custom scripts...")
+    app_full = get_app_full(base_url, token, app_id, timeout_sec=args.timeout, verbose=args.verbose)
+
     print("Fetching TypeScript definitions (.d.ts)...")
-    tsd = get_typescript_definitions(
+    tsd = get_typescript_definitions_for_app(
         base_url,
         token,
         app_id,
         language=args.language,
         timeout_sec=args.timeout,
         verbose=args.verbose,
+        app_full=app_full,
     )
-
-    print("Fetching app structure + workflows + custom scripts...")
-    app_full = get_app_full(base_url, token, app_id, timeout_sec=args.timeout, verbose=args.verbose)
     workflows_table = try_get_table_data(
         base_url,
         token,
