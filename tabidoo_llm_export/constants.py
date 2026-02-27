@@ -24,6 +24,7 @@ class Defaults:
     LANGUAGE = "en"
     TIMEOUT_SEC = 30
     ACCEPT_LANGUAGE_QUALITY = "0.6"
+    TABLE_DATA_PAGE_LIMIT = 1000
 
 
 class EnvVar(StrEnum):

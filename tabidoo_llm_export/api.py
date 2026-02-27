@@ -56,15 +56,33 @@ class TabidooApi:
         return data
 
     def get_table_data(self, app_id: str, table_internal: TableInternal) -> Optional[list[dict[str, Any]]]:
-        path = Endpoint.TABLE_DATA.format(app_id=app_id, table=table_internal)
-        try:
-            payload = self._client.get_json(path)
-        except CliError:
-            return None
-        data = JsonUnwrapper.unwrap(payload)
-        if not isinstance(data, list):
-            return None
-        return [r for r in data if isinstance(r, dict)]
+        base_path = Endpoint.TABLE_DATA.format(app_id=app_id, table=table_internal)
+        limit = Defaults.TABLE_DATA_PAGE_LIMIT
+        skip = 0
+        records: list[dict[str, Any]] = list(CollectionDefaults.EMPTY)
+
+        while True:
+            path = f"{base_path}?limit={limit}&skip={skip}"
+            try:
+                payload = self._client.get_json(path)
+            except CliError:
+                return records if records else None
+
+            data = JsonUnwrapper.unwrap(payload)
+            if not isinstance(data, list):
+                return records if records else None
+            if not data:
+                break
+
+            page = [row for row in data if isinstance(row, dict)]
+            records.extend(page)
+
+            if len(data) < limit:
+                break
+
+            skip += len(data)
+
+        return records
 
     def get_typescript_definition(
         self,
