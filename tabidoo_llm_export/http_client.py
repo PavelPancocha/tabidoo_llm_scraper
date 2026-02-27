@@ -15,9 +15,11 @@ from .constants import (
     Char,
     CollectionDefaults,
     DecodeDefaults,
+    Defaults,
     Encoding,
     ErrorKey,
     ExitCode,
+    Format,
     HeaderName,
     HeaderValue,
     HttpMethod,
@@ -60,9 +62,18 @@ class HttpErrorFormatter:
 
 
 class HttpClient:
-    def __init__(self, base_url: str, token: str, timeout_sec: int, verbose: bool, console: Console) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        token: str,
+        language: str,
+        timeout_sec: int,
+        verbose: bool,
+        console: Console,
+    ) -> None:
         self._base_url = base_url
         self._token = token
+        self._language = language
         self._timeout_sec = timeout_sec
         self._verbose = verbose
         self._console = console
@@ -74,9 +85,15 @@ class HttpClient:
         )
 
     def _default_headers(self) -> dict[str, str]:
+        accept_language = Format.ACCEPT_LANGUAGE.format(
+            language=self._language,
+            quality=Defaults.ACCEPT_LANGUAGE_QUALITY,
+        )
         return {
             HeaderName.AUTHORIZATION: f"{HeaderValue.AUTH_SCHEME} {self._token}",
-            HeaderName.ACCEPT: HeaderValue.ACCEPT_JSON,
+            HeaderName.ACCEPT: HeaderValue.ACCEPT_FE,
+            HeaderName.ACCEPT_LANGUAGE: accept_language,
+            HeaderName.USER_AGENT: HeaderValue.USER_AGENT,
         }
 
     def request(

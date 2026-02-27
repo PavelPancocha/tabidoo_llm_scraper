@@ -115,6 +115,7 @@ class HeaderName(StrEnum):
     APPINFO = "appinfo"
     ORIGIN = "Origin"
     REFERER = "Referer"
+    USER_AGENT = "User-Agent"
 
 
 class HeaderValue(StrEnum):
@@ -122,6 +123,10 @@ class HeaderValue(StrEnum):
     ACCEPT_JSON = "application/json"
     ACCEPT_FE = "application/json, text/plain, */*"
     CONTENT_JSON = "application/json"
+    USER_AGENT = (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    )
 
 
 class HttpMethod(StrEnum):

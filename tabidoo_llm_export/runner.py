@@ -33,7 +33,14 @@ class ExportRunner:
         self._verbose = verbose
 
     def run(self, app_id: Optional[str], out_dir: Path, non_interactive: bool) -> tuple[Path, Path]:
-        client = HttpClient(self._base_url, self._token, self._timeout_sec, self._verbose, self._ui.console)
+        client = HttpClient(
+            self._base_url,
+            self._token,
+            self._language,
+            self._timeout_sec,
+            self._verbose,
+            self._ui.console,
+        )
         api = TabidooApi(client)
         selector = AppSelector(self._ui.console)
         extractor = ScriptExtractor()
