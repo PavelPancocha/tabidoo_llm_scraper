@@ -201,6 +201,7 @@ class OutputSuffix(StrEnum):
 
 class MarkdownText(StrEnum):
     CODE_FENCE_TS = "```typescript"
+    CODE_FENCE_JS = "```javascript"
     CODE_FENCE_END = "```"
     TITLE_TSD = "# TypeScript Definitions"
     TITLE_ANALYSIS = "# Application Code Analysis"
@@ -216,6 +217,8 @@ class MarkdownText(StrEnum):
     TRIGGERS_LABEL = "**Triggers:** {value}"
     NAMESPACE_LABEL = "**Namespace:** {value}"
     INTERFACE_LABEL = "**Interface:** {value}"
+    DEFINITIONS_LABEL = "**Definitions:**"
+    SCRIPT_LABEL = "**Script:**"
     TABLE_COMMENT = "// Table: {name} ({schema_id})"
 
 

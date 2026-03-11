@@ -74,13 +74,19 @@ class ScriptExtractor:
                     if not isinstance(script, dict):
                         continue
                     js = script.get(JsonKey.JS_SCRIPT)
-                    if isinstance(js, str) and js.strip():
-                        ts = script.get(JsonKey.TS_SCRIPT)
+                    ts = script.get(JsonKey.TS_SCRIPT)
+                    if (
+                        isinstance(js, str)
+                        and js.strip()
+                    ) or (
+                        isinstance(ts, str)
+                        and ts.strip()
+                    ):
                         fragments.append(
                             ExtractedCodeFragment(
                                 table=table_name,
                                 field_name=str(script.get(JsonKey.NAME, DefaultName.TABLE_SCRIPT)),
-                                code_js=js,
+                                code_js=js if isinstance(js, str) else SanitizeDefaults.EMPTY,
                                 code_ts=ts if isinstance(ts, str) else SanitizeDefaults.EMPTY,
                             )
                         )
@@ -91,12 +97,18 @@ class ScriptExtractor:
         self, table: str, field_name: str, meta: dict[str, Any]
     ) -> Optional[ExtractedCodeFragment]:
         js = meta.get(JsonKey.JS_SCRIPT)
-        if isinstance(js, str) and js.strip():
-            ts = meta.get(JsonKey.TS_SCRIPT)
+        ts = meta.get(JsonKey.TS_SCRIPT)
+        if (
+            isinstance(js, str)
+            and js.strip()
+        ) or (
+            isinstance(ts, str)
+            and ts.strip()
+        ):
             return ExtractedCodeFragment(
                 table=table,
                 field_name=field_name,
-                code_js=js,
+                code_js=js if isinstance(js, str) else SanitizeDefaults.EMPTY,
                 code_ts=ts if isinstance(ts, str) else SanitizeDefaults.EMPTY,
             )
         return None
@@ -118,31 +130,7 @@ class ScriptExtractor:
                 if isinstance(definition.get(JsonKey.STEPS), list)
                 else CollectionDefaults.EMPTY
             )
-            for step in steps:
-                if not isinstance(step, dict):
-                    continue
-                if step.get(JsonKey.TYPE) != WorkflowStepType.JS_SCRIPT:
-                    continue
-                data = step.get(JsonKey.DATA) if isinstance(step.get(JsonKey.DATA), dict) else {}
-                script = data.get(JsonKey.SCRIPT) if isinstance(data.get(JsonKey.SCRIPT), dict) else {}
-                code_js = (
-                    script.get(JsonKey.RUNABLE_SCRIPT)
-                    if isinstance(script.get(JsonKey.RUNABLE_SCRIPT), str)
-                    else SanitizeDefaults.EMPTY
-                )
-                code_ts = (
-                    script.get(JsonKey.WRITTEN_TYPESCRIPT)
-                    if isinstance(script.get(JsonKey.WRITTEN_TYPESCRIPT), str)
-                    else SanitizeDefaults.EMPTY
-                )
-                extracted.append(
-                    ExtractedWorkflowCodeFragment(
-                        workflow=name,
-                        triggers=triggers_json,
-                        code_js=code_js,
-                        code_ts=code_ts,
-                    )
-                )
+            extracted.extend(self._extract_workflow_steps(steps, name, triggers_json))
         return extracted
 
     def extract_custom_scripts(
@@ -166,4 +154,72 @@ class ScriptExtractor:
                     else SanitizeDefaults.EMPTY,
                 )
             )
+        return extracted
+
+    def _extract_workflow_steps(
+        self,
+        steps: list[dict[str, Any]] | tuple[Any, ...],
+        workflow_name: str,
+        triggers_json: str,
+    ) -> list[ExtractedWorkflowCodeFragment]:
+        extracted: list[ExtractedWorkflowCodeFragment] = list(CollectionDefaults.EMPTY)
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+
+            data = step.get(JsonKey.DATA) if isinstance(step.get(JsonKey.DATA), dict) else {}
+            if step.get(JsonKey.TYPE) == WorkflowStepType.JS_SCRIPT:
+                script = data.get(JsonKey.SCRIPT) if isinstance(data.get(JsonKey.SCRIPT), dict) else {}
+                code_js = (
+                    script.get(JsonKey.RUNABLE_SCRIPT)
+                    if isinstance(script.get(JsonKey.RUNABLE_SCRIPT), str)
+                    else SanitizeDefaults.EMPTY
+                )
+                code_ts = (
+                    script.get(JsonKey.WRITTEN_TYPESCRIPT)
+                    if isinstance(script.get(JsonKey.WRITTEN_TYPESCRIPT), str)
+                    else SanitizeDefaults.EMPTY
+                )
+                if code_js.strip() or code_ts.strip():
+                    extracted.append(
+                        ExtractedWorkflowCodeFragment(
+                            workflow=workflow_name,
+                            triggers=triggers_json,
+                            code_js=code_js,
+                            code_ts=code_ts,
+                        )
+                    )
+
+            extracted.extend(self._extract_nested_workflow_definitions(data, workflow_name, triggers_json))
+
+        return extracted
+
+    def _extract_nested_workflow_definitions(
+        self,
+        value: Any,
+        workflow_name: str,
+        triggers_json: str,
+    ) -> list[ExtractedWorkflowCodeFragment]:
+        extracted: list[ExtractedWorkflowCodeFragment] = list(CollectionDefaults.EMPTY)
+
+        if isinstance(value, dict):
+            workflow_definition = value.get("workflowDefinition")
+            if isinstance(workflow_definition, dict):
+                nested_steps = workflow_definition.get(JsonKey.STEPS)
+                if isinstance(nested_steps, list):
+                    extracted.extend(self._extract_workflow_steps(nested_steps, workflow_name, triggers_json))
+
+            for nested_value in value.values():
+                if nested_value is not workflow_definition:
+                    extracted.extend(
+                        self._extract_nested_workflow_definitions(
+                            nested_value,
+                            workflow_name,
+                            triggers_json,
+                        )
+                    )
+        elif isinstance(value, list):
+            for item in value:
+                extracted.extend(self._extract_nested_workflow_definitions(item, workflow_name, triggers_json))
+
         return extracted

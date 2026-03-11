@@ -985,6 +985,18 @@ main()
 "
 ```
 
+### Extraction Guardrails
+
+When changing extractors, treat these as mandatory checks:
+
+- **Assume table-data endpoints may be paginated**. Verify whether `/tables/{table}/data` returns only the first page by default, and fetch all rows with `limit` + `skip` until exhausted.
+- **Do not assume workflow code lives only in top-level `jsScript` steps**. Workflow containers such as `foreach` can hide executable code inside `data.workflowDefinition.steps`, so workflow extraction must recurse through nested workflow definitions.
+- **Do not emit empty code fences when code exists**. If TypeScript is missing but JavaScript exists, render JavaScript instead of an empty TypeScript block.
+- **Do not drop custom script definitions**. If a custom script exposes both `dts.runableSript` and `script.runableSript`, export both.
+- **Support TS-only and JS-only sources**. Field scripts, free-HTML init scripts, and table scripts should be exported when either `jsScript` or `tsScript` is present.
+- **Validate extraction against raw payload shape**. For any “missing script” report, inspect the raw API response first and compare raw script count vs extracted fragment count before changing formatter logic.
+- **Add regression fixtures for real failure modes**. Keep fixtures for paginated `wascenarios` / `customScripts`, nested `workflowDefinition`, JS-only blocks, TS-only blocks, and custom scripts with `.d.ts`.
+
 ### Code Style
 
 **Type Hints**: Required on all function signatures
@@ -1375,11 +1387,29 @@ ruff format .
       "triggers": [...],        # Trigger configuration
       "steps": [
         {
-          "type": "jsScript",   # Step type
+          "type": "jsScript",   # Direct script step
           "data": {
             "script": {
               "runableSript": str,         # Note: typo in API (Sript)
               "writtenTypeScript": str
+            }
+          }
+        },
+        {
+          "type": "foreach",    # Container step; may hide nested workflow code
+          "data": {
+            "workflowDefinition": {
+              "steps": [
+                {
+                  "type": "jsScript",
+                  "data": {
+                    "script": {
+                      "runableSript": str,
+                      "writtenTypeScript": str
+                    }
+                  }
+                }
+              ]
             }
           }
         }
@@ -1410,5 +1440,5 @@ ruff format .
 
 ---
 
-*Last Updated: 2026-01-14*
+*Last Updated: 2026-03-11*
 *Version: 0.1.0*

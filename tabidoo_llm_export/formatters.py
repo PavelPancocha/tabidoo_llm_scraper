@@ -27,9 +27,7 @@ class LlmFormatter:
             sections.append(MarkdownText.BLOCK_PREFIX.format(index=idx) + Newline.LF)
             sections.append(MarkdownText.TABLE_LABEL.format(name=block.table))
             sections.append(MarkdownText.FIELD_LABEL.format(name=block.field_name) + Newline.LF)
-            sections.append(f"{MarkdownText.CODE_FENCE_TS}{Newline.LF}")
-            sections.append(block.code_ts or SanitizeDefaults.EMPTY)
-            sections.append(f"{MarkdownText.CODE_FENCE_END}{Newline.LF}")
+            sections.extend(self._render_code_block(block.code_ts, block.code_js))
 
         if workflows:
             sections.append(f"{MarkdownText.TITLE_WORKFLOW}{Newline.DOUBLE}")
@@ -38,9 +36,7 @@ class LlmFormatter:
                     MarkdownText.WORKFLOW_PREFIX.format(index=idx, name=wf.workflow) + Newline.LF
                 )
                 sections.append(MarkdownText.TRIGGERS_LABEL.format(value=wf.triggers) + Newline.LF)
-                sections.append(f"{MarkdownText.CODE_FENCE_TS}{Newline.LF}")
-                sections.append(wf.code_ts or SanitizeDefaults.EMPTY)
-                sections.append(f"{MarkdownText.CODE_FENCE_END}{Newline.LF}")
+                sections.extend(self._render_code_block(wf.code_ts, wf.code_js))
 
         if custom_scripts:
             sections.append(f"{MarkdownText.TITLE_CUSTOM}{Newline.DOUBLE}")
@@ -50,11 +46,27 @@ class LlmFormatter:
                 )
                 sections.append(MarkdownText.NAMESPACE_LABEL.format(value=cs.namespace) + Newline.LF)
                 sections.append(MarkdownText.INTERFACE_LABEL.format(value=cs.interface) + Newline.LF)
-                sections.append(f"{MarkdownText.CODE_FENCE_TS}{Newline.LF}")
-                sections.append(cs.script or SanitizeDefaults.EMPTY)
-                sections.append(f"{MarkdownText.CODE_FENCE_END}{Newline.LF}")
+                if cs.dts.strip():
+                    sections.append(MarkdownText.DEFINITIONS_LABEL + Newline.LF)
+                    sections.extend(self._render_code_block(cs.dts, SanitizeDefaults.EMPTY))
+                sections.append(MarkdownText.SCRIPT_LABEL + Newline.LF)
+                sections.extend(self._render_code_block(SanitizeDefaults.EMPTY, cs.script))
 
         return Newline.LF.join(sections)
+
+    @staticmethod
+    def _render_code_block(code_ts: str, code_js: str) -> list[str]:
+        if code_ts.strip():
+            return [
+                f"{MarkdownText.CODE_FENCE_TS}{Newline.LF}",
+                code_ts,
+                f"{MarkdownText.CODE_FENCE_END}{Newline.LF}",
+            ]
+        return [
+            f"{MarkdownText.CODE_FENCE_JS}{Newline.LF}",
+            code_js or SanitizeDefaults.EMPTY,
+            f"{MarkdownText.CODE_FENCE_END}{Newline.LF}",
+        ]
 
 
 class MarkdownRenderer:
