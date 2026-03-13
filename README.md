@@ -4,13 +4,15 @@ Standalone Python CLI that exports Tabidoo application context into LLM-ready fi
 
 ## What it does
 
-1. Load `TABIDOO_FE_TOKEN` (FE JWT from the browser session) from a `.env` file in your working directory (or from the process environment).
-2. Validate the configuration and list accessible apps.
-3. Let you pick an app (or continue automatically if only one exists).
-4. Download:
-   - TypeScript definitions (`.d.ts`)
-   - "All scripts for LLM" (Markdown)
-5. Write outputs to a predictable folder structure.
+1. Load `TABIDOO_API_TOKEN` from a `.env` file in your working directory (or from the process environment).
+2. Optionally load `TABIDOO_FE_TOKEN` if you also want the full schema definition export.
+3. Validate the configuration and list accessible apps.
+4. Let you pick an app (or continue automatically if only one exists).
+5. Download:
+   - Full schema definitions (`schema.md`, FE token only)
+   - Official tables overview (`tables.md`)
+   - "All scripts for LLM" (`scripts.md`)
+6. Write outputs to a predictable folder structure.
 
 ## Output layout
 
@@ -18,13 +20,16 @@ Default output (overridable via CLI flags):
 
 ```
 ./out/<app-name>-schema.md
+./out/<app-name>-tables.md
 ./out/<app-name>-scripts.md
 ```
 
 ### File contents
 
 - `<app-name>-schema.md`
-  - TypeScript definitions wrapped in a Markdown code block
+  - Full schema definition wrapped in a Markdown TypeScript block
+- `<app-name>-tables.md`
+  - Markdown overview grouped by modules with table metadata and field navigation
 - `<app-name>-scripts.md`
   - Markdown bundle of app scripts prepared for LLM input
 
@@ -46,7 +51,9 @@ uv sync
 
 1) Create `.env` in your working directory:
 
-```
+```bash
+TABIDOO_API_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxx
+# optional, required only for full schema.md:
 TABIDOO_FE_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
@@ -99,7 +106,7 @@ The CLI talks directly to Tabidoo API endpoints:
 - `GET /v2/users/me` (token validation)
 - `GET /v2/apps`
 - `GET /v2/apps/{appId}`
-- `POST /application/getApplicationTypeScriptDefinition` (requires FE JWT; mirrors FE headers and per-table `schemaId`)
+- `POST /application/getApplicationTypeScriptDefinition` (optional; only for full `schema.md`, requires FE token)
 - `GET /v2/apps/{appId}/tables/customScripts/data` (optional)
 - `GET /v2/apps/{appId}/tables/wascenarios/data` (optional)
 
@@ -123,8 +130,8 @@ Recommended exit codes:
 ## Troubleshooting
 
 - 401 / 403:
-  - Verify `TABIDOO_FE_TOKEN` is correct and has access to the target apps.
-  - The script will exit if the `.d.ts` endpoint is unauthorized.
+  - Verify `TABIDOO_API_TOKEN` is correct and has access to the target apps.
+  - If only `schema.md` is missing, verify `TABIDOO_FE_TOKEN`; the CLI can still produce `tables.md` and `scripts.md` without it.
 - No apps returned:
   - The token might be scoped to a different instance or base URL.
 - Try `--base-url` explicitly (use `https://app.tabidoo.cloud/api`).

@@ -6,17 +6,15 @@ from typing import Optional
 from .api import TabidooApi, TsdFetcher
 from .constants import (
     CollectionDefaults,
-    CountDefaults,
     JsonKey,
     Prefix,
     ProgressStep,
     TableInternal,
     Text,
-    UiDefaults,
 )
-from .errors import ApiError, UserInputError
+from .errors import ApiError, CliError, UserInputError
 from .extractor import ScriptExtractor
-from .formatters import LlmFormatter
+from .formatters import LlmFormatter, TablesFormatter
 from .http_client import HttpClient
 from .output import OutputWriter
 from .stats import StatsBuilder
@@ -24,15 +22,25 @@ from .ui import AppSelector, Ui
 
 
 class ExportRunner:
-    def __init__(self, ui: Ui, base_url: str, token: str, language: str, timeout_sec: int, verbose: bool) -> None:
+    def __init__(
+        self,
+        ui: Ui,
+        base_url: str,
+        token: str,
+        fe_token: str | None,
+        language: str,
+        timeout_sec: int,
+        verbose: bool,
+    ) -> None:
         self._ui = ui
         self._base_url = base_url
         self._token = token
+        self._fe_token = fe_token
         self._language = language
         self._timeout_sec = timeout_sec
         self._verbose = verbose
 
-    def run(self, app_id: Optional[str], out_dir: Path, non_interactive: bool) -> tuple[Path, Path]:
+    def run(self, app_id: Optional[str], out_dir: Path, non_interactive: bool) -> tuple[Path | None, Path, Path]:
         client = HttpClient(
             self._base_url,
             self._token,
@@ -42,11 +50,23 @@ class ExportRunner:
             self._ui.console,
         )
         api = TabidooApi(client)
+        schema_api = None
+        if self._fe_token:
+            schema_client = HttpClient(
+                self._base_url,
+                self._fe_token,
+                self._language,
+                self._timeout_sec,
+                self._verbose,
+                self._ui.console,
+            )
+            schema_api = TabidooApi(schema_client)
         selector = AppSelector(self._ui.console)
         extractor = ScriptExtractor()
         formatter = LlmFormatter()
+        tables_formatter = TablesFormatter()
         writer = OutputWriter()
-        tsd_fetcher = TsdFetcher(api, self._base_url)
+        tsd_fetcher = TsdFetcher(schema_api, self._base_url) if schema_api else None
 
         with self._ui.spinner(Text.AUTHENTICATING) as status:
             user = api.get_user()
@@ -68,25 +88,31 @@ class ExportRunner:
         with self._ui.spinner(Text.LOADING_APP) as status:
             app_full = api.get_app_full(selected.app_id)
 
-        tables = app_full.get(JsonKey.TABLES, CollectionDefaults.EMPTY)
-        table_count = len(tables) if isinstance(tables, list) else UiDefaults.PROGRESS_UNIT
-        if table_count == CountDefaults.ZERO:
-            table_count = UiDefaults.PROGRESS_UNIT
-
         with self._ui.progress() as progress:
-            base_steps = len(ProgressStep) * UiDefaults.PROGRESS_UNIT
-            export_task = progress.add_task(Text.EXPORTING, total=base_steps + table_count)
+            export_task = progress.add_task(Text.EXPORTING, total=len(ProgressStep))
 
             progress.update(export_task, description=Text.FETCHING_TSD)
-            tsd = tsd_fetcher.fetch(selected.app_id, self._language, app_full, progress, export_task)
+            schema_md: str | None = None
+            if tsd_fetcher is None:
+                self._ui.warning(Text.SKIP_SCHEMA_NO_FE)
+            else:
+                try:
+                    schema_md = tsd_fetcher.fetch(selected.app_id, self._language, app_full)
+                except CliError as exc:
+                    self._ui.warning(Text.SKIP_SCHEMA_ERROR.format(reason=str(exc)))
+            progress.advance(export_task)
+
+            progress.update(export_task, description=Text.BUILDING_TABLES)
+            tables_md = tables_formatter.format(app_full)
+            progress.advance(export_task)
 
             progress.update(export_task, description=Text.FETCHING_WORKFLOWS)
             workflows_table = api.get_table_data(selected.app_id, TableInternal.WORKFLOWS)
-            progress.advance(export_task, UiDefaults.PROGRESS_UNIT)
+            progress.advance(export_task)
 
             progress.update(export_task, description=Text.FETCHING_CUSTOM)
             custom_scripts_table = api.get_table_data(selected.app_id, TableInternal.CUSTOM_SCRIPTS)
-            progress.advance(export_task, UiDefaults.PROGRESS_UNIT)
+            progress.advance(export_task)
 
             progress.update(export_task, description=Text.EXTRACTING)
             extracted = extractor.extract(app_full)
@@ -101,16 +127,32 @@ class ExportRunner:
                 else list(CollectionDefaults.EMPTY)
             )
             llm_md = formatter.format(extracted, workflows, custom_scripts)
-            progress.advance(export_task, UiDefaults.PROGRESS_UNIT)
+            progress.advance(export_task)
 
             progress.update(export_task, description=Text.WRITING)
-            schema_path, scripts_path = writer.write(out_dir, selected, tsd, llm_md)
-            progress.advance(export_task, UiDefaults.PROGRESS_UNIT)
+            schema_path, tables_path, scripts_path = writer.write(
+                out_dir,
+                selected,
+                schema_md,
+                tables_md,
+                llm_md,
+            )
+            progress.advance(export_task)
 
-        stats = StatsBuilder.build(app_full, extracted, workflows, custom_scripts, tsd, llm_md)
+        stats = StatsBuilder.build(
+            app_full,
+            extracted,
+            workflows,
+            custom_scripts,
+            schema_md or "",
+            tables_md,
+            llm_md,
+        )
         self._ui.show_stats(stats)
         self._ui.success(Text.DONE)
         self._ui.info(Text.WROTE)
-        self._ui.info(f"{Prefix.BULLET}{schema_path}")
+        if schema_path is not None:
+            self._ui.info(f"{Prefix.BULLET}{schema_path}")
+        self._ui.info(f"{Prefix.BULLET}{tables_path}")
         self._ui.info(f"{Prefix.BULLET}{scripts_path}")
-        return schema_path, scripts_path
+        return schema_path, tables_path, scripts_path

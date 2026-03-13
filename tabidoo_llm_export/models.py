@@ -35,8 +35,10 @@ class ExportStats:
     code_blocks: int
     workflows: int
     custom_scripts: int
-    tsd_lines: int
-    tsd_bytes: int
+    schema_lines: int
+    schema_bytes: int
+    tables_md_lines: int
+    tables_md_bytes: int
     llm_lines: int
     llm_bytes: int
 

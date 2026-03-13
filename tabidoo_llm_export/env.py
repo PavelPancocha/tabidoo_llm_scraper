@@ -50,10 +50,16 @@ class EnvLoader:
 class TokenProvider:
     @staticmethod
     def read() -> str:
+        for env_var in (EnvVar.API_TOKEN, EnvVar.FE_TOKEN):
+            token = os.environ.get(env_var, SanitizeDefaults.EMPTY).strip()
+            if token:
+                return token
+        raise InvalidConfigError(Text.MISSING_TOKEN)
+
+    @staticmethod
+    def read_fe_optional() -> str | None:
         token = os.environ.get(EnvVar.FE_TOKEN, SanitizeDefaults.EMPTY).strip()
-        if not token:
-            raise InvalidConfigError(Text.MISSING_TOKEN)
-        return token
+        return token or None
 
 
 class UrlNormalizer:

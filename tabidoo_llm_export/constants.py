@@ -28,6 +28,7 @@ class Defaults:
 
 
 class EnvVar(StrEnum):
+    API_TOKEN = "TABIDOO_API_TOKEN"
     FE_TOKEN = "TABIDOO_FE_TOKEN"
 
 
@@ -163,12 +164,17 @@ class JsonKey(StrEnum):
     ID = "id"
     EMAIL = "email"
     NAME = "name"
+    SHORT_ID = "shortId"
     INTERNAL_NAME = "internalName"
     INTERNAL_NAME_API = "internalNameApi"
+    MODULES = "modules"
+    TABLE_IDS = "tableIds"
     TABLES = "tables"
     ITEMS = "items"
     TYPE = "type"
     METADATA = "metadata"
+    DESCRIPTION = "description"
+    REQUIRED = "required"
     SCRIPT = "script"
     JS_SCRIPT = "jsScript"
     TS_SCRIPT = "tsScript"
@@ -196,24 +202,35 @@ class AppInfoKey(StrEnum):
 
 class OutputSuffix(StrEnum):
     SCHEMA = "schema.md"
+    TABLES = "tables.md"
     SCRIPTS = "scripts.md"
 
 
 class MarkdownText(StrEnum):
+    TITLE_TSD = "# TypeScript Definitions"
     CODE_FENCE_TS = "```typescript"
     CODE_FENCE_JS = "```javascript"
     CODE_FENCE_END = "```"
-    TITLE_TSD = "# TypeScript Definitions"
+    TITLE_TABLES = "# Application Tables"
     TITLE_ANALYSIS = "# Application Code Analysis"
     TITLE_WORKFLOW = "## Workflow Code"
     TITLE_CUSTOM = "## Custom Scripts"
     BLOCK_PREFIX = "## Code Block {index}"
     WORKFLOW_PREFIX = "### Workflow {index}: {name}"
     CUSTOM_PREFIX = "### Custom Script {index}: {name}"
+    MODULE_PREFIX = "## Module: {name}"
+    UNGROUPED_TABLES = "## Ungrouped Tables"
+    TABLE_PREFIX = "### Table: {name}"
     TABLE_LABEL = "**Table:** {name}"
     FIELD_LABEL = "**Field:** {name}"
     APP_ID_LABEL = "**Application ID:** {value}"
     APP_NAME_LABEL = "**Application Name:** {value}"
+    APP_INTERNAL_LABEL = "**Application Internal Name:** {value}"
+    TABLE_ID_LABEL = "**Table ID:** {value}"
+    TABLE_INTERNAL_LABEL = "**Table Internal Name:** {value}"
+    TABLE_FIELDS_HEADER = "| Field Label | Internal Name | Type | Required | Description |"
+    TABLE_FIELDS_SEPARATOR = "| --- | --- | --- | --- | --- |"
+    TABLE_FIELD_ROW = "| {header} | `{name}` | `{type}` | {required} | {description} |"
     TRIGGERS_LABEL = "**Triggers:** {value}"
     NAMESPACE_LABEL = "**Namespace:** {value}"
     INTERFACE_LABEL = "**Interface:** {value}"
@@ -268,6 +285,8 @@ class CountDefaults(IntEnum):
 
 
 class ProgressStep(IntEnum):
+    SCHEMA = auto()
+    TABLES = auto()
     WORKFLOWS = auto()
     CUSTOM = auto()
     EXTRACT = auto()
@@ -308,7 +327,8 @@ class Text(StrEnum):
     AUTHENTICATING = "🔐 Authenticating"
     LOADING_APPS = "📦 Loading apps"
     LOADING_APP = "🧱 Loading app structure"
-    FETCHING_TSD = "🧠 Fetching TypeScript definitions"
+    FETCHING_TSD = "🧠 Fetching full schema definitions"
+    BUILDING_TABLES = "🗂️ Building tables overview"
     FETCHING_WORKFLOWS = "⚙️ Fetching workflows"
     FETCHING_CUSTOM = "🧩 Fetching custom scripts"
     EXTRACTING = "🧪 Extracting scripts"
@@ -318,7 +338,10 @@ class Text(StrEnum):
     SELECT_APP = "Select app (number or app id)"
     INVALID_SELECTION = "Invalid selection. Try again."
     NO_APPS = "No apps returned for this token."
-    MISSING_TOKEN = "Missing TABIDOO_FE_TOKEN. Put it into .env in your working directory."
+    MISSING_TOKEN = (
+        "Missing TABIDOO_API_TOKEN or TABIDOO_FE_TOKEN. "
+        "Put one of them into .env in your working directory."
+    )
     BAD_BASE_URL = "Base URL must start with http:// or https://"
     EMPTY_BASE_URL = "Base URL is empty."
     MISSING_APP_ID = "Selected app is missing 'id'."
@@ -330,6 +353,8 @@ class Text(StrEnum):
     JSON_ERROR_POST = "Invalid JSON response from POST {path}"
     TSD_MISSING = "Unexpected TypeScript definition response (missing 'content')."
     TSD_FAILED = "Unable to fetch TypeScript definitions for app or any table."
+    SKIP_SCHEMA_NO_FE = "Skipping full schema export: TABIDOO_FE_TOKEN is not available."
+    SKIP_SCHEMA_ERROR = "Skipping full schema export: {reason}"
     CANCELLED = "Cancelled."
     STATS_TITLE = "Export Stats"
     WROTE = "Wrote"
@@ -351,8 +376,10 @@ class StatsLabel(StrEnum):
     CODE_BLOCKS = "Code blocks"
     WORKFLOWS = "Workflow scripts"
     CUSTOM_SCRIPTS = "Custom scripts"
-    TSD_LINES = "TSD lines"
-    TSD_BYTES = "TSD bytes"
+    SCHEMA_LINES = "Schema lines"
+    SCHEMA_BYTES = "Schema bytes"
+    TABLES_MD_LINES = "Tables MD lines"
+    TABLES_MD_BYTES = "Tables MD bytes"
     LLM_LINES = "LLM lines"
     LLM_BYTES = "LLM bytes"
 

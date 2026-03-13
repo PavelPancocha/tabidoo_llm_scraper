@@ -18,7 +18,8 @@ class StatsBuilder:
         extracted: ExtractedCode,
         workflows: list[ExtractedWorkflowCodeFragment],
         custom_scripts: list[ExtractedCustomScriptCodeFragment],
-        tsd: str,
+        schema_md: str,
+        tables_md: str,
         llm: str,
     ) -> ExportStats:
         tables = app_full.get(JsonKey.TABLES)
@@ -34,8 +35,10 @@ class StatsBuilder:
             code_blocks=len(extracted.fragments),
             workflows=len(workflows),
             custom_scripts=len(custom_scripts),
-            tsd_lines=len(tsd.splitlines()),
-            tsd_bytes=len(tsd.encode(Encoding.UTF8)),
+            schema_lines=len(schema_md.splitlines()),
+            schema_bytes=len(schema_md.encode(Encoding.UTF8)),
+            tables_md_lines=len(tables_md.splitlines()),
+            tables_md_bytes=len(tables_md.encode(Encoding.UTF8)),
             llm_lines=len(llm.splitlines()),
             llm_bytes=len(llm.encode(Encoding.UTF8)),
         )

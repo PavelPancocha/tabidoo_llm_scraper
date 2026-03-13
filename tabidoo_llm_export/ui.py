@@ -39,6 +39,9 @@ class Ui:
     def success(self, message: str) -> None:
         self._console.print(message, style=Style.SUCCESS)
 
+    def warning(self, message: str) -> None:
+        self._console.print(message, style=Style.WARNING)
+
     def error(self, message: str) -> None:
         self._console.print(message, style=Style.ERROR)
 
@@ -64,8 +67,10 @@ class Ui:
         table.add_row(StatsLabel.CODE_BLOCKS, str(stats.code_blocks))
         table.add_row(StatsLabel.WORKFLOWS, str(stats.workflows))
         table.add_row(StatsLabel.CUSTOM_SCRIPTS, str(stats.custom_scripts))
-        table.add_row(StatsLabel.TSD_LINES, str(stats.tsd_lines))
-        table.add_row(StatsLabel.TSD_BYTES, str(stats.tsd_bytes))
+        table.add_row(StatsLabel.SCHEMA_LINES, str(stats.schema_lines))
+        table.add_row(StatsLabel.SCHEMA_BYTES, str(stats.schema_bytes))
+        table.add_row(StatsLabel.TABLES_MD_LINES, str(stats.tables_md_lines))
+        table.add_row(StatsLabel.TABLES_MD_BYTES, str(stats.tables_md_bytes))
         table.add_row(StatsLabel.LLM_LINES, str(stats.llm_lines))
         table.add_row(StatsLabel.LLM_BYTES, str(stats.llm_bytes))
         self._console.print()

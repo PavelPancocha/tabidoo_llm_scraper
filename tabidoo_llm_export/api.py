@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from rich.progress import Progress
-
 from .constants import (
     ApiField,
     Char,
@@ -21,7 +19,6 @@ from .constants import (
     SanitizeDefaults,
     TableInternal,
     Text,
-    UiDefaults,
     UrlPart,
 )
 from .env import AppInfoBuilder, Encoder, JsonUnwrapper
@@ -127,7 +124,7 @@ class TsdFetcher:
             headers[HeaderName.REFERER] = referer
         return headers
 
-    def fetch(self, app_id: str, language: str, app_full: dict[str, Any], progress: Progress, task_id: int) -> str:
+    def fetch(self, app_id: str, language: str, app_full: dict[str, Any]) -> str:
         tables = app_full.get(JsonKey.TABLES)
         if not isinstance(tables, list):
             tables = CollectionDefaults.EMPTY
@@ -137,7 +134,6 @@ class TsdFetcher:
 
         for table in tables:
             if not isinstance(table, dict):
-                progress.advance(task_id, UiDefaults.PROGRESS_UNIT)
                 continue
             schema_id = str(table.get(JsonKey.ID, SanitizeDefaults.EMPTY)).strip()
             internal = (
@@ -155,7 +151,6 @@ class TsdFetcher:
             )
             parts.append(MarkdownText.TABLE_COMMENT.format(name=internal, schema_id=schema_id))
             parts.append(content.rstrip())
-            progress.advance(task_id, UiDefaults.PROGRESS_UNIT)
 
         if parts:
             return Newline.DOUBLE.join(parts).rstrip() + Newline.LF
@@ -166,6 +161,4 @@ class TsdFetcher:
             schema_id=None,
             headers=self._headers(language, None),
         )
-        if not tables:
-            progress.advance(task_id, UiDefaults.PROGRESS_UNIT)
         return content

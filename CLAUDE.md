@@ -2,23 +2,23 @@
 
 ## Project Overview
 
-**Tabidoo LLM Export CLI** is a standalone Python command-line tool that exports Tabidoo application context into LLM-ready files. It provides an interactive user experience for downloading TypeScript definitions and application scripts from Tabidoo cloud applications, preparing them for use with Large Language Models.
+**Tabidoo LLM Export CLI** is a standalone Python command-line tool that exports Tabidoo application context into Markdown files optimized for LLM consumption and human navigation.
 
 ### Purpose
 
 The tool bridges Tabidoo's low-code platform with AI-assisted development by:
-- Extracting TypeScript definitions (`.d.ts`) from Tabidoo applications
-- Collecting all custom scripts, workflows, and code blocks
-- Formatting the extracted data in a structured Markdown format optimized for LLM consumption
-- Providing a clean, interactive CLI experience with rich terminal output
+- Exporting the full FE-only schema definition into `*-schema.md` when `TABIDOO_FE_TOKEN` is available
+- Exporting an official API-based tables overview into `*-tables.md`
+- Collecting custom scripts, workflows, and field-level code into `*-scripts.md`
+- Producing deterministic, reviewable Markdown outputs with a simple CLI UX
 
 ### Key Capabilities
 
-1. **Authentication**: Uses Tabidoo FE JWT tokens for API access
+1. **Hybrid Authentication**: Uses `TABIDOO_API_TOKEN` for documented read endpoints and optional `TABIDOO_FE_TOKEN` for full schema definition export
 2. **Interactive Selection**: Lists accessible apps and allows user selection
-3. **Comprehensive Extraction**: Downloads TypeScript definitions, custom scripts, workflows, and field-level code
-4. **LLM-Optimized Output**: Generates structured Markdown files ready for AI assistant consumption
-5. **Rich UX**: Progress bars, colored output, and informative statistics
+3. **Comprehensive Extraction**: Downloads workflows, custom scripts, field-level code, and optional full schema definitions
+4. **Navigation-Friendly Output**: Generates both a compact table/field overview and an LLM-oriented scripts bundle
+5. **Partial Export Support**: Produces `tables.md` and `scripts.md` even when full schema export is unavailable
 
 ---
 
@@ -27,7 +27,7 @@ The tool bridges Tabidoo's low-code platform with AI-assisted development by:
 ### Technology Stack
 
 - **Python**: 3.13+ (3.11+ supported)
-- **Package Manager**: `uv` (modern, fast Python package manager)
+- **Package Manager**: `uv`
 - **Key Dependencies**:
   - `typer` - CLI framework with type hints
   - `rich` - Terminal UI (progress bars, colors, tables)
@@ -41,15 +41,15 @@ tabidoo_llm_export/
 ├── __main__.py          # Python -m entry point
 ├── cli.py               # CLI command definition (Typer)
 ├── runner.py            # Main export orchestration
-├── api.py               # Tabidoo API client & TSD fetcher
+├── api.py               # Tabidoo API client & optional FE TSD fetcher
 ├── http_client.py       # HTTP request handling
 ├── extractor.py         # Script/code extraction logic
-├── formatters.py        # LLM-optimized Markdown formatting
+├── formatters.py        # Markdown formatting for schema/tables/scripts
 ├── output.py            # File writing operations
 ├── models.py            # Data models (dataclasses)
 ├── errors.py            # Custom exception hierarchy
 ├── constants.py         # Constants, enums, text messages
-├── env.py               # Environment & config management
+├── env.py               # Environment & token management
 ├── ui.py                # User interface (Rich console)
 └── stats.py             # Statistics computation
 ```
@@ -65,16 +65,17 @@ tabidoo_llm_export/
 **Key Components**:
 - `export()` command with CLI options
 - Options: `--app-id`, `--out-dir`, `--base-url`, `--language`, `--no-interactive`, `--timeout`, `--verbose`
-- Exception handling for `CliError` and `KeyboardInterrupt`
+- Loads `.env`, resolves the primary read token, optionally resolves FE token for full schema export
 - Delegates execution to `ExportRunner`
 
 **Flow**:
 1. Display banner
-2. Load `.env` file
-3. Read and validate token
-4. Normalize base URL
-5. Create and run `ExportRunner`
-6. Handle errors with appropriate exit codes
+2. Load `.env`
+3. Read `TABIDOO_API_TOKEN` or fallback `TABIDOO_FE_TOKEN`
+4. Read optional `TABIDOO_FE_TOKEN` for full schema export
+5. Normalize base URL
+6. Create and run `ExportRunner`
+7. Handle errors with appropriate exit codes
 
 **Exit Codes**:
 - `0` - Success
@@ -89,25 +90,27 @@ tabidoo_llm_export/
 
 ### 2. **runner.py** - Export Orchestration
 
-**Purpose**: Main business logic coordinating the entire export process.
+**Purpose**: Coordinates the full export flow and handles partial export when FE-only schema export is unavailable.
 
 **Class**: `ExportRunner`
 
 **Process Flow**:
-1. **Authenticate** - Validate token via `/v2/users/me`
-2. **Load Apps** - Get accessible apps via `/v2/apps`
-3. **Select App** - Interactive selection or use `--app-id`
-4. **Load App Details** - Get full app structure via `/v2/apps/{appId}`
-5. **Fetch TypeScript Definitions** - Download `.d.ts` for each table
-6. **Fetch Workflows** - Get workflow data from `wascenarios` table
-7. **Fetch Custom Scripts** - Get custom scripts from `customScripts` table
-8. **Extract Code** - Parse and extract all code fragments
-9. **Format for LLM** - Generate structured Markdown
-10. **Write Files** - Save to `{app-name}-schema.md` and `{app-name}-scripts.md`
+1. **Authenticate** via `/v2/users/me` using the primary read token
+2. **Load Apps** via `/v2/apps`
+3. **Select App** interactively or through `--app-id`
+4. **Load App Details** via `/v2/apps/{appId}`
+5. **Fetch Full Schema Definitions** via FE-only endpoint when `TABIDOO_FE_TOKEN` is present
+6. **Build Tables Overview** from official app metadata (`modules`, `tables`, `items`)
+7. **Fetch Workflows** from `wascenarios`
+8. **Fetch Custom Scripts** from `customScripts`
+9. **Extract Code** from tables, fields, workflows, and custom scripts
+10. **Write Files** to `{app-name}-schema.md` (optional), `{app-name}-tables.md`, `{app-name}-scripts.md`
 
-**Progress Tracking**: Uses Rich progress bars with descriptive steps
+**Partial Export Behavior**:
+- If FE token is missing or the FE schema endpoint fails, the run continues.
+- `schema.md` is skipped, any stale old schema file is removed, and `tables.md` / `scripts.md` are still written.
 
-**Return Value**: Tuple of `(schema_path, scripts_path)`
+**Return Value**: Tuple of `(schema_path | None, tables_path, scripts_path)`
 
 ---
 
@@ -116,41 +119,27 @@ tabidoo_llm_export/
 **Classes**:
 
 #### `TabidooApi`
-Core API client wrapping HTTP requests.
+Core API client wrapping documented HTTP requests.
 
 **Methods**:
 - `get_user()` - Validate token and get user info
 - `list_apps()` - List accessible applications
-- `get_app_full(app_id)` - Get complete app structure with tables/fields
-- `get_table_data(app_id, table_internal)` - Get data from system tables (workflows, custom scripts)
-- `get_typescript_definition(app_id, language, schema_id, headers)` - Fetch TypeScript definitions
+- `get_app_full(app_id)` - Get complete app structure including `modules`, `tables`, `items`, and table scripts
+- `get_table_data(app_id, table_internal)` - Get paginated data from system tables (`wascenarios`, `customScripts`)
+- `get_typescript_definition(app_id, language, schema_id, headers)` - Optional FE-only full schema definition fetch
 
 **Key Features**:
-- JSON unwrapping (handles `{data: ...}` responses)
-- Error handling with typed exceptions
-- Optional endpoint support (returns `None` on failure)
+- JSON unwrapping (`{data: ...}`)
+- Pagination for `/tables/{table}/data` via `limit` + `skip`
+- Typed error handling
 
 #### `TsdFetcher`
-Specialized fetcher for TypeScript definitions with browser-like headers.
-
-**Methods**:
-- `fetch(app_id, language, app_full, progress, task_id)` - Fetch `.d.ts` for all tables
+Optional FE-only fetcher for `/application/getApplicationTypeScriptDefinition`.
 
 **Features**:
-- Mimics browser requests with proper headers (Origin, Referer, Accept-Language)
-- Per-table fetching with progress updates
-- Comment injection for table identification
-- Fallback to app-level fetch if no tables
-
-**Headers Sent**:
-```
-Authorization: Bearer {token}
-Accept: application/json, text/plain, */*
-Accept-Language: {language};q=0.6
-Origin: {origin}
-Referer: {origin}/app/{appInternal}/schema/{tableInternal}
-appinfo: {urlencoded_json}
-```
+- Uses browser-like headers (`Origin`, `Referer`, `Accept-Language`, `appinfo`)
+- Fetches per-table schema definitions and concatenates them into one `schema.md` payload
+- Used only when `TABIDOO_FE_TOKEN` is available
 
 ---
 
@@ -158,99 +147,41 @@ appinfo: {urlencoded_json}
 
 **Class**: `ScriptExtractor`
 
-**Methods**:
+**Responsibilities**:
+- Extract field and table scripts from app structure
+- Extract workflow scripts from `wascenarios`
+- Extract custom scripts from `customScripts`
 
-#### `extract(app_structure)` → `ExtractedCode`
-Extracts code from application structure (tables, fields, scripts).
-
-**Extraction Targets**:
-- **Calculated Fields** (`calculatedfield`) - Field-level scripts
-- **Button Fields** (`buttonform`) - Button action scripts
-- **Free HTML Fields** (`freehtmlinput`) - HTML init scripts
-- **Table Scripts** - Schema-level scripts
-
-**Returns**: `ExtractedCode` with:
-- `app_id`
-- `app_name`
-- `fragments[]` - List of `ExtractedCodeFragment`
-
-#### `extract_workflows(workflows)` → `list[ExtractedWorkflowCodeFragment]`
-Extracts JavaScript/TypeScript from workflow definitions.
-
-**Data Source**: `/v2/apps/{appId}/tables/wascenarios/data`
-
-**Extracted**:
-- Workflow name
-- Triggers (JSON)
-- JavaScript/TypeScript from `jsScript` steps
-
-#### `extract_custom_scripts(custom_scripts)` → `list[ExtractedCustomScriptCodeFragment]`
-Extracts custom scripts from the custom scripts table.
-
-**Data Source**: `/v2/apps/{appId}/tables/customScripts/data`
-
-**Extracted**:
-- Script name
-- Namespace
-- Interface
-- TypeScript definitions (`.d.ts`)
-- Runnable script code
+**Important Behavior**:
+- Supports both JS-only and TS-only field/table scripts
+- Recurses through nested workflow containers such as `foreach -> workflowDefinition -> steps`
+- Preserves custom script `.d.ts` definitions alongside runnable code
 
 ---
 
-### 5. **formatters.py** - LLM Output Formatting
+### 5. **formatters.py** - Markdown Formatting
 
 **Classes**:
 
 #### `LlmFormatter`
-Formats extracted code into LLM-friendly Markdown.
+Formats extracted code into the final `*-scripts.md` bundle.
 
-**Output Structure**:
-```markdown
-# Application Code Analysis
+**Important Behavior**:
+- Renders TypeScript when present
+- Falls back to JavaScript when TypeScript is absent
+- Includes custom script definitions (`dts`) and runnable script blocks
 
-**Application ID:** {app_id}
-**Application Name:** {app_name}
+#### `TablesFormatter`
+Builds `*-tables.md` from official app metadata.
 
-## Code Block 1
-**Table:** {table_name}
-**Field:** {field_name}
-
-```typescript
-{typescript_code}
-```
-
-## Workflow Code
-
-### Workflow 1: {workflow_name}
-**Triggers:** {triggers_json}
-
-```typescript
-{typescript_code}
-```
-
-## Custom Scripts
-
-### Custom Script 1: {script_name}
-**Namespace:** {namespace}
-**Interface:** {interface}
-
-```typescript
-{script_code}
-```
-```
+**Output Shape**:
+- App metadata header
+- Tables grouped by modules when module mappings are available
+- Fallback `Ungrouped Tables` section for tables not assigned to any module
+- Per-table Markdown table with: field label, internal name, type, required flag, description
 
 #### `MarkdownRenderer`
-Wraps TypeScript definitions in Markdown code blocks.
-
-**Output**:
-```markdown
-# TypeScript Definitions
-
-```typescript
-{typescript_definitions}
-```
-```
+Wraps the FE-only full schema definition into a Markdown TypeScript code fence for `*-schema.md`.
 
 ---
 
@@ -336,8 +267,10 @@ fields: int
 code_blocks: int
 workflows: int
 custom_scripts: int
-tsd_lines: int
-tsd_bytes: int
+schema_lines: int
+schema_bytes: int
+tables_md_lines: int
+tables_md_bytes: int
 llm_lines: int
 llm_bytes: int
 ```
@@ -379,6 +312,7 @@ llm_bytes: int
 - `Defaults.OUT_DIR` - `./out`
 - `Defaults.LANGUAGE` - `en`
 - `Defaults.TIMEOUT_SEC` - `30`
+- `Defaults.TABLE_DATA_PAGE_LIMIT` - `1000`
 
 #### Text Messages
 - `Text.TITLE`, `Text.DONE`, `Text.AUTHENTICATING`, etc.
@@ -389,7 +323,7 @@ llm_bytes: int
 - `Endpoint.USERS_ME` - `/v2/users/me`
 - `Endpoint.APPS` - `/v2/apps`
 - `Endpoint.APP_DETAIL` - `/v2/apps/{app_id}`
-- `Endpoint.TSD` - `/application/getApplicationTypeScriptDefinition`
+- `Endpoint.TSD` - `/application/getApplicationTypeScriptDefinition` (optional, FE-only)
 - `Endpoint.TABLE_DATA` - `/v2/apps/{app_id}/tables/{table}/data`
 
 #### Markdown Templates
@@ -411,9 +345,12 @@ Loads `.env` files using `python-dotenv` or fallback parser.
 - Only sets if not already in environment
 
 #### `TokenProvider`
-Reads `TABIDOO_FE_TOKEN` from environment.
+Resolves tokens from environment.
 
-**Validation**: Raises `InvalidConfigError` if missing or empty.
+**Behavior**:
+- `read()` prefers `TABIDOO_API_TOKEN`, then falls back to `TABIDOO_FE_TOKEN`
+- `read_fe_optional()` returns `TABIDOO_FE_TOKEN` only, or `None`
+- Raises `InvalidConfigError` only when neither token is available
 
 #### `UrlNormalizer`
 Normalizes and validates base URLs.
@@ -463,7 +400,7 @@ URL-encodes strings (wraps `urllib.parse.quote`).
 **Methods**:
 - `banner()` - Display title banner
 - `progress()` - Create Rich progress context
-- `info(msg)`, `success(msg)`, `error(msg)` - Colored output
+- `info(msg)`, `success(msg)`, `warning(msg)`, `error(msg)` - Colored output
 - `show_stats(stats)` - Display statistics table
 
 **Class**: `AppSelector`
@@ -484,20 +421,24 @@ URL-encodes strings (wraps `urllib.parse.quote`).
 
 **Class**: `OutputWriter`
 
-**Method**: `write(out_dir, app, tsd, llm_md)` → `(schema_path, scripts_path)`
+**Method**: `write(out_dir, app, schema_md, tables_md, llm_md)` → `(schema_path | None, tables_path, scripts_path)`
 
 **Process**:
 1. Create output directory (with parents)
 2. Sanitize app name for filename
 3. Generate filenames:
    - `{sanitized_name}-schema.md`
+   - `{sanitized_name}-tables.md`
    - `{sanitized_name}-scripts.md`
-4. Write files with UTF-8 encoding
+4. Wrap full schema definition into a Markdown TypeScript block
+5. If schema export is skipped, remove any stale old schema file
+6. Write files with UTF-8 encoding
 
 **Output Structure**:
 ```
 ./out/
-├── my_app-schema.md    # TypeScript definitions
+├── my_app-schema.md    # Full schema definition (optional)
+├── my_app-tables.md    # Official API-based tables overview
 └── my_app-scripts.md   # Application code analysis
 ```
 
@@ -507,7 +448,7 @@ URL-encodes strings (wraps `urllib.parse.quote`).
 
 **Class**: `StatsBuilder`
 
-**Method**: `build(app_full, extracted, workflows, custom_scripts, tsd, llm_md)` → `ExportStats`
+**Method**: `build(app_full, extracted, workflows, custom_scripts, schema_md, tables_md, llm_md)` → `ExportStats`
 
 **Computed Metrics**:
 - **Tables** - Count from app structure
@@ -515,8 +456,10 @@ URL-encodes strings (wraps `urllib.parse.quote`).
 - **Code blocks** - Number of extracted code fragments
 - **Workflow scripts** - Number of workflow code fragments
 - **Custom scripts** - Number of custom script fragments
-- **TSD lines** - Line count in TypeScript definitions
-- **TSD bytes** - Byte size of TypeScript definitions
+- **Schema lines** - Line count in `schema.md`
+- **Schema bytes** - Byte size of `schema.md`
+- **Tables MD lines** - Line count in `tables.md`
+- **Tables MD bytes** - Byte size of `tables.md`
 - **LLM lines** - Line count in formatted output
 - **LLM bytes** - Byte size of formatted output
 
@@ -526,16 +469,19 @@ URL-encodes strings (wraps `urllib.parse.quote`).
 
 ### Authentication
 
-**Method**: Bearer token (JWT) from browser session
+**Method**: Bearer token (JWT)
 
-**How to Obtain Token**:
-1. Open Tabidoo web app in browser
-2. Open Developer Tools (F12)
-3. Go to Application/Storage → Local Storage
-4. Find `TABIDOO_FE_TOKEN` key
-5. Copy the value
+**Primary Token**:
+- `TABIDOO_API_TOKEN` generated in Tabidoo user settings
+- Used for all documented read endpoints used by the exporter
 
-**Token Storage**: Store in `.env` file as `TABIDOO_FE_TOKEN=xxx`
+**Optional Token**:
+- `TABIDOO_FE_TOKEN` from browser localStorage
+- Used only for `/application/getApplicationTypeScriptDefinition` to create full `schema.md`
+
+**Token Storage**:
+- Store `TABIDOO_API_TOKEN` in `.env`
+- Add `TABIDOO_FE_TOKEN` only if full schema export is needed
 
 **Security**:
 - Never print token in logs
@@ -586,13 +532,21 @@ Gets full application structure.
     "id": "app_id",
     "name": "App Name",
     "internalName": "app_internal",
+    "modules": [
+      {
+        "header": "Module Name",
+        "tableIds": ["table_id"]
+      }
+    ],
     "tables": [
       {
         "id": "table_id",
+        "header": "Table Name",
         "internalNameApi": "table_name",
         "items": [
           {
             "name": "field_name",
+            "header": "Field Label",
             "type": "calculatedfield",
             "metadata": {
               "script": {
@@ -616,7 +570,12 @@ Gets full application structure.
 ```
 
 #### 4. **POST /application/getApplicationTypeScriptDefinition**
-Fetches TypeScript definitions.
+Fetches full schema definitions.
+
+**Status**:
+- Not part of the documented public API blueprint used by the rest of the exporter
+- Requires `TABIDOO_FE_TOKEN`
+- Optional in the current runtime; export continues without it
 
 **Request Headers**:
 ```
@@ -651,6 +610,10 @@ Gets data from system tables.
 - `wascenarios` - Workflows
 - `customScripts` - Custom scripts
 
+**Pagination**:
+- The runtime fetches these endpoints with `limit` + `skip`
+- `wascenarios` defaults to 25 rows server-side if pagination is omitted
+
 **Response**:
 ```json
 {
@@ -673,7 +636,10 @@ Gets data from system tables.
 ### Environment Variables
 
 **Required**:
-- `TABIDOO_FE_TOKEN` - Frontend JWT token from browser session
+- `TABIDOO_API_TOKEN` - API token for documented read endpoints
+
+**Optional**:
+- `TABIDOO_FE_TOKEN` - Browser FE token for full `schema.md`
 
 **Optional** (via CLI flags):
 - `--base-url` - API base URL (default: `https://app.tabidoo.cloud/api`)
@@ -683,7 +649,10 @@ Gets data from system tables.
 ### .env File Format
 
 ```bash
-# Tabidoo FE Token from browser localStorage
+# Required: API token from Tabidoo user settings
+TABIDOO_API_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# Optional: browser FE token for full schema export
 TABIDOO_FE_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 # Optional: Override base URL
@@ -713,6 +682,9 @@ uv sync
 ```bash
 # Interactive mode (with .env file)
 uv run tabidoo-llm-export
+
+# Interactive mode with full schema export
+uv run tabidoo-llm-export  # with TABIDOO_FE_TOKEN present
 
 # Non-interactive with specific app
 uv run tabidoo-llm-export --app-id ABC123 --yes
@@ -755,6 +727,7 @@ uv run python tabidoo_llm_export.py
 
 Files are named using sanitized app names:
 - `{sanitized_app_name}-schema.md`
+- `{sanitized_app_name}-tables.md`
 - `{sanitized_app_name}-scripts.md`
 
 **Sanitization Rules**:
@@ -765,11 +738,12 @@ Files are named using sanitized app names:
 
 **Examples**:
 - "My App" → `my_app-schema.md`
+- "My App" → `my_app-tables.md`
 - "CRM System (v2)" → `crm_system_v2-schema.md`
 
 ### Schema File (`*-schema.md`)
 
-Contains TypeScript definitions wrapped in Markdown:
+Contains full FE-only schema definitions wrapped in Markdown:
 
 ```markdown
 # TypeScript Definitions
@@ -793,6 +767,29 @@ declare namespace Orders {
   }
 }
 ```
+```
+
+### Tables File (`*-tables.md`)
+
+Contains a module-grouped overview of tables and fields derived from official app metadata:
+
+```markdown
+# Application Tables
+
+**Application ID:** app_123
+**Application Name:** My App
+**Application Internal Name:** my_app
+
+## Module: Sales
+
+### Table: Customers
+**Table Internal Name:** customers
+**Table ID:** table_123
+
+| Field Label | Internal Name | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| Name | `name` | `text` | yes | Customer name |
+| Email | `email` | `text` | no | Primary contact email |
 ```
 
 ### Scripts File (`*-scripts.md`)
@@ -968,18 +965,23 @@ tests/
 ├── test_models.py            # Test dataclass creation
 └── fixtures/
     ├── sample_app.json       # Sample API responses
-    └── sample_tsd.ts         # Sample TypeScript definitions
+    ├── sample_tsd.ts          # Sample full schema definition payload
+    └── sample_tables.md       # Sample module-grouped tables overview
 ```
 
 **Testing with Real API**:
 ```bash
 # Set up test .env
-echo "TABIDOO_FE_TOKEN=your_test_token" > .env.test
+cat > .env.test << EOF
+TABIDOO_API_TOKEN=your_api_token
+# optional:
+# TABIDOO_FE_TOKEN=your_fe_token
+EOF
 
 # Run with test environment
 uv run python -c "
 import os
-os.environ['TABIDOO_FE_TOKEN'] = 'test_token'
+os.environ['TABIDOO_API_TOKEN'] = 'test_token'
 from tabidoo_llm_export.cli import main
 main()
 "
@@ -1076,15 +1078,15 @@ Details:
 
 ### Common Issues
 
-#### 1. "Missing TABIDOO_FE_TOKEN"
+#### 1. "Missing TABIDOO_API_TOKEN or TABIDOO_FE_TOKEN"
 
-**Cause**: Token not found in environment or `.env` file
+**Cause**: No usable token found in environment or `.env` file
 
 **Solution**:
 ```bash
 # Create .env file
 cat > .env << EOF
-TABIDOO_FE_TOKEN=your_token_here
+TABIDOO_API_TOKEN=your_token_here
 EOF
 ```
 
@@ -1094,9 +1096,8 @@ EOF
 
 **Solution**:
 1. Open Tabidoo in browser
-2. Log in again if needed
-3. Extract new token from localStorage
-4. Update `.env` file
+2. Regenerate API token in user settings or log in again if using FE token
+3. Update `.env` file
 
 #### 3. "No apps returned for this token"
 
@@ -1107,14 +1108,14 @@ EOF
 - Try specifying `--base-url` explicitly
 - Check if using correct Tabidoo instance
 
-#### 4. "Unable to fetch TypeScript definitions"
+#### 4. "Full schema export was skipped"
 
-**Cause**: App has no tables, or endpoint authorization failed
+**Cause**: `TABIDOO_FE_TOKEN` is missing, invalid, or `/application/getApplicationTypeScriptDefinition` rejected the token
 
 **Solution**:
-- Verify app has at least one table
-- Check token permissions
-- Try with `--verbose` to see request details
+- Verify `TABIDOO_FE_TOKEN`
+- Re-export if you also need `schema.md`
+- `tables.md` and `scripts.md` are still considered valid output
 
 #### 5. "Invalid JSON response"
 
@@ -1131,12 +1132,16 @@ EOF
 
 ### Request Optimization
 
-**Per-Table TSD Fetching**: For apps with many tables, TypeScript definitions are fetched individually per table. This:
+**Per-Table TSD Fetching**: When `TABIDOO_FE_TOKEN` is available, full schema definitions are fetched individually per table. This:
 - Provides granular progress updates
 - Allows partial success (some tables may fail)
 - Mimics browser behavior for better compatibility
 
 **Trade-off**: More HTTP requests = longer execution time for apps with 50+ tables
+
+**Tables Overview Rendering**:
+- `tables.md` is built from one app detail payload already loaded for extraction
+- No extra per-table schema requests are needed for the navigation document
 
 ### Memory Usage
 
@@ -1147,11 +1152,13 @@ EOF
 ### Output File Size
 
 **Typical Sizes**:
-- Schema file: 50 KB - 5 MB
+- Schema file: 50 KB - 20 MB
+- Tables file: 10 KB - 500 KB
 - Scripts file: 10 KB - 2 MB
 
 **Large Apps** (100+ tables, 1000+ fields):
 - Schema file: up to 20 MB
+- Tables file: up to 2 MB
 - Scripts file: up to 10 MB
 
 ---
@@ -1165,6 +1172,7 @@ EOF
 - Add `.env` to `.gitignore`
 - Use environment variables in CI/CD
 - Rotate tokens regularly
+- Prefer `TABIDOO_API_TOKEN` for automation; add `TABIDOO_FE_TOKEN` only when full schema export is required
 
 **DON'T**:
 - Hardcode tokens in source code
@@ -1212,6 +1220,7 @@ COPY tabidoo_llm_export/ ./tabidoo_llm_export/
 RUN uv sync --frozen
 
 # Set environment
+ENV TABIDOO_API_TOKEN=""
 ENV TABIDOO_FE_TOKEN=""
 
 # Entry point
@@ -1221,7 +1230,7 @@ CMD ["uv", "run", "tabidoo-llm-export"]
 Usage:
 ```bash
 docker build -t tabidoo-exporter .
-docker run -v $(pwd)/out:/app/out -e TABIDOO_FE_TOKEN=$TOKEN tabidoo-exporter --yes
+docker run -v $(pwd)/out:/app/out -e TABIDOO_API_TOKEN=$TOKEN tabidoo-exporter --yes
 ```
 
 ### CI/CD Integration
@@ -1245,6 +1254,7 @@ jobs:
 
       - name: Export app
         env:
+          TABIDOO_API_TOKEN: ${{ secrets.TABIDOO_API_TOKEN }}
           TABIDOO_FE_TOKEN: ${{ secrets.TABIDOO_FE_TOKEN }}
         run: |
           uv sync
@@ -1269,8 +1279,8 @@ jobs:
 4. **Filtering**: Exclude specific tables/fields from export
 5. **Diff Mode**: Compare exports between versions
 6. **Watch Mode**: Auto-export on app changes
-7. **API Key Support**: Use API keys instead of FE tokens
-8. **Caching**: Cache TypeScript definitions locally
+7. **Caching**: Cache full schema definitions locally
+8. **Selective Exports**: Allow exporting only schema / tables / scripts
 
 ### API Compatibility
 
@@ -1440,5 +1450,5 @@ ruff format .
 
 ---
 
-*Last Updated: 2026-03-11*
+*Last Updated: 2026-03-13*
 *Version: 0.1.0*
