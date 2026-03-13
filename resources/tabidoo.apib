@@ -1,0 +1,1926 @@
+FORMAT: 1A
+HOST: https://app.tabidoo.cloud/api/v2
+
+# Tabidoo API v.2
+
+The Tabidoo API is a simple way to integrate 
+your app with [Tabidoo](https://tabidoo.cloud). 
+If you're a developer or familiar with APIs, you should be able to build a complete integration within minutes.
+
+[Full Tabidoo Help](https://help.tabidoo.cloud/)
+
+## Using the API
+
+[Tabidoo](https://tabidoo.cloud) API is served over HTTPS, on the following endpoint ``https://app.tabidoo.cloud/api/v2/``.
+
+## Authentication
+[Tabidoo](https://tabidoo.cloud) uses [JSON Web Token (JWT)](https://en.wikipedia.org/wiki/JSON_Web_Token) authentication. 
+
+Everything what you need is your own JWT Token. 
+You can get one by logging into [Tabidoo app](https://app.tabidoo.cloud/login) 
+and visiting [User settings page](https://app.tabidoo.cloud/user) - section *API* - here you will generate your token.
+
+### Using Token
+
+All API request must contain header named *Authorization* with 
+Token as value - ``Authorization: Bearer <jwt-token>`` and made over HTTPS.
+
+**Your JWT Token carries the same privileges as your user account, so be sure to keep it secret!**
+
+## Rate limits
+
+To help prevent strain on Tabidoo’s servers, our API 
+checks requests per minute. 
+There is a request limit for 
+each JWT token. If a request exceeds the limit, 
+[Tabidoo](https://tabidoo.cloud) will return the *429 Too Many Requests HTTP* status error and you will have to wait at least 60 seconds 
+before you send another request. 
+
+### Limits
+[Tabidoo](https://tabidoo.cloud) offers several pricing plans and each has its rate limits - check out our [pricing plan](https://tabidoo.cloud/en/pricing).
+
+If you need to set higher limits, please feel free to contact us at [support@tabidoo.cloud](mailto:support@tabidoo.cloud).
+
+## Request rules
+
+- Character encoding **UTF-8** is used
+- Data is in the format **application/json**
+
+### Allowed HTTPs requests
+- **GET**    :   Get a resource or list of resources
+- **POST**   :   To create resource 
+- **PUT**    :   To (full) update resource
+- **PATCH**   :   To (partial) update resource
+- **DELETE** :   To delete resource
+
+## Response rules
+
+- Character encoding **UTF-8** is used
+- Data is in the format **application/json**
+- Response JSON object contains one of the following top-level members:
+    - ``data`` : the document´s "primary data" (object or array of objects)
+    - ``errors`` : array of error objects
+- The members ``data`` and ``errors`` **do not coexist** in the same response.
+
+## Handle Errors
+
+Error item contains three members. 
+
+- ```type``` - type of error (enum)
+    - *info* - validation (info) error
+    - *warning* - unexpected work with data
+    - *exception* - other errors
+- ```id``` - identifier of error
+- ```message``` - more info about error
+
+Error body example: 
+```json
+{
+    "errors": [
+        {
+            "type": "info",
+            "id": "specifiedCodeAlreadyExistsException",
+            "message": "EndPoint, Name, 853181"
+        }
+    ]
+}
+```
+
+### HTTP status codes
+
+#### Success 2xx
+
+- **200** - Everything is working OK
+- **201** - New resource has been created
+- **204** - The resource was successfully deleted
+
+#### Client errors 4xx
+
+- **400** - Bad Request - The request was invalid or cannot be served. The exact error is explained in the error detail.
+- **401** - Unauthorized - The request requires a user authentication
+- **403** - Forbidden - The server understood the request, but is refusing it or the access is not allowed.
+- **404** - Not found - There is no resource behind the URI.
+- **429** - [Too Many Requests](#introduction/rate-limits)
+
+#### Server errors 5xx
+There is an error on our side. Please feel free to contact us at [support@tabidoo.cloud](mailto:support@tabidoo.cloud).
+
+## API resources
+
+>When using the Tabidoo API resources, you will need an application or table identifier. You can easily retrieve this information from the URL address of your Tabidoo app (look at the address bar of your browser).
+
+### Getting app and table identifiers
+
+For example, you might have this URL in your browser's address bar:
+
+https://app.tabidoo.cloud/app/my-app/schema/my-table
+
+Application identifier is *my-app*.
+
+Table identifier is *my-table*.
+
+*You can also use the GUID identifier variant to identify applications and tables.*
+
+### Getting record identifier
+
+The easiest way to get the record ID is to open the record form and click the share button - the URL containing the record ID will be displayed (look at the end of the URL). Example:
+```...?recordId=8ef96265-1e21-49db-909b-94a8f004aade```
+
+### Applications
+In **[Tabidoo](https://tabidoo.cloud)**, everything starts with the application. The application is sort of like a shell for your data where you can store, organize, and analyze your data.
+
+### Tables
+Each application can contain several tables. You can imagine the table as an Excel sheet or a database table. 
+
+The table consists of items of different data types (such as textbox, date, number, etc.). 
+
+**JSON example - Table response**
+```json
+    { 
+        "data": [{
+            "id": "2252d3ce-0bce-44fa-b8d6-1e0ab1f0c277",
+            "shortid": "xbo9aya392",
+            "header": "Customers",
+            "items": [...]
+        }]
+    }
+```
+
+- ```id``` - table id
+- ```shortid``` - table short id
+- ```header``` - table header
+- ```items``` - array of table fields (table items)
+
+#### Table fields ```items```
+Each field object contains meta-information about the field
+
+**JSON example - Table field response**
+```json
+    {
+        "name": "firstname",
+        "header": "Firstname",
+        "type": "text",
+        "metadata": {
+            ...
+        }
+    }
+```
+
+- ```name``` - item name
+- ```header``` - item header
+- ```type``` - data type of item 
+    - ```text, radio, chat, long_text, dropdown, dropdownmulti, checklist, date, datetime, checkbox, money, decimal, number, percentage, picture, file, system_type, chips, url_link, schema_link, freehtmlinput, buttonform```
+- ```metadata``` - meta information - by (data) type
+
+
+### Records (user data)
+
+Records represent data stored by the user via **[Tabidoo](https://tabidoo.cloud)**. Every time you create a new record, a new "row" of user data is created.
+Each record contains system informations and data properties with user values.
+
+**JSON example - Record**
+```json
+    { 
+        "data": [{
+            "id": "158cb6ef-02a6-47dc-8134-188c1b6426e6",
+            "created": "2019-03-22T14:41:23.5783244+00:00",
+            "modified": "2019-03-24T16:45:23.5783244+00:00",
+            "ver": 0,
+            "fields": {
+                "firstname": "John",
+                "surname": "Snow",
+                "age": 35
+            }
+        }
+    }
+```
+
+- ``id`` - ID of the record
+- ``created`` - the date the record was created
+- ``modified`` - the date of the last change to record
+- ``ver`` - current version of the record
+- ``fields`` - the array of data properties with values
+
+## Fields
+
+Each record you add to a table is composed of individual Fields. 
+Tabidoo offers you several data types to use with API. 
+In this section, we will explain to you, how to use each.
+
+
+
+### Text 
+``text``
+
+A single line of text.
+
+```json
+"title": "Tabidoo"
+```
+
+### Long text
+``long_text``
+
+Multiple lines of text.
+
+```json
+"text": "<p>Hello!</p><p><br></p><p>How are you?</p>"
+```
+
+### Number 
+``number``
+
+Integer number.
+
+```json
+"age": 24
+```
+
+### Decimal
+``decimal``
+
+A decimal number showing decimal digit. 
+
+```json
+"length": 65.2543
+```
+
+### Percentage
+``percentage``
+
+Number of percent. The stored value is the shown value divided by 100!
+
+E. g. when you insert 0.1, the system displays 10 (as 10%)
+
+```json
+"vat": 0.1
+```
+
+### Money
+``money``
+
+A decimal number showing 2 decimal digit. 
+
+```json
+"cost": 999.99
+```
+
+### Money With Currency
+``money_with_currency``
+
+Money with automatic currency recalculation.
+
+```json
+"currencyFieldName": {
+    "amount": 120,
+    "currency": "USD",
+    "date": "2021-05-06T00:00:00"
+}
+```
+
+The date part is optional.
+
+### Checkbox (Yes/No)
+``checkbox``
+
+The value is _true_ or _false_.
+
+```json
+"isEnabled": true
+```
+
+### Date / Datetime
+``date`` ``datetime``
+
+UTC date (and time). [ISO 8601 formatted UTC date-time](https://en.wikipedia.org/wiki/ISO_8601).
+
+Applications with enabled new "UTC date and time format (ISO 8601)" settings:
+```json
+"dateOnly": "2025-12-31",
+"dateOnly": "2025-12-31T23:30:00Z",
+"dateOnly": "2026-01-01T00:30:00",
+"dateTime": "2025-12-31",
+"dateTime": "2025-12-31Z",
+"dateTime": "2025-12-31T23:59:59Z"
+"dateTime": "2026-01-01T00:59:59"
+```
+Date-only - UTC time value is converted to local time value according to the application's time zone (except UTC zero time value), then the date part is extracted.
+
+Date-time - local time value is converted to UTC time value according to the application's time zone. 
+
+Applications with disabled "UTC date and time format (ISO 8601)" settings (deprecated):
+```json
+"date": "2021-05-06T00:00:00.000Z",
+"dateTime": "2021-05-06T12:46:00.000Z"
+```
+Date-only - has to be specified with UTC zero time (midnight in UTC time zone).
+
+Date-time - has to be specified with UTC time (time in UTC time zone). 
+
+For more information about Date and time handling in API, visit [**Date and time handling in workflow scripts, form scripts and API**](https://help.tabidoo.cloud/en/article/date-and-time-handling-in-workflow-scripts-form-scripts-and-api) chapter of Tabidoo documentation
+
+### Dropdown / Radio
+``dropdown`` ``radio``
+
+Single select.
+
+```json
+"priority": "High"
+```
+
+### Multi choice
+``dropdownmulti``
+
+Multi select. Array of strings.
+
+```json
+"colors": ["Red", "Blue"]
+```
+
+### Tags 
+``chips``
+
+Displays a list of values as individual tags/chips. Array of strings.
+
+```json
+"colors": ["One", "Two"]
+```
+
+### URL/Mailto link
+``url_link``
+
+URL link with description.
+
+```json
+"urllink": {
+    "href": "https://tabidoo.cloud",
+    "description": "Tabidoo"
+}
+```
+
+- ``href`` - URL link (_required_)
+- ``description`` - link description (_optional_)
+
+### Markdown
+``markdown``
+
+Markdown is a lightweight markup language for creating formatted text using a plain-text editor.
+
+```json
+"markdown": "# Headline\nText\n"
+```
+
+### Checklist
+``checklist``
+
+The checklist is similar to to-do lists. You can have one list of items or multiple lists of items. 
+Each list has its own header and items. The item has a header (item text) and a boolean indicator (checked/unchecked).
+
+```json
+"checklist": {
+    "lists": [
+        {
+            "id": "xtgr3tqqlr",
+            "header": "default",
+            "items": [
+                {
+                    "id": "xga4v56jrx",
+                    "header": "One",
+                    "checked": true
+                },
+                {
+                    "id": "x1ekesf670",
+                    "header": "Two",
+                    "checked": false
+                },
+                {
+                    "id": "xjhxvyattw",
+                    "header": "Three",
+                    "checked": false
+                }
+            ],
+            "checkedCount": 1,
+            "progress": 33.0
+        }
+    ],
+    "progress": 33.0
+}
+```
+
+- ``lists`` - array of lists
+    - ``id`` - a list unique identifier (_generated by Tabidoo_)
+    - ``header`` - list header
+    - ``items`` - array of items
+        - ``id`` - an item unique identifier (_generated by Tabidoo_)
+        - ``header`` - item header (text)
+        - ``checked`` - a boolean indicator (checked/unchecked)
+    - ``checkedCount`` - count of checked items
+    - ``progress`` - the ratio of checked items in the current list
+- ``progress`` - the ratio of checked items in all lists
+
+### Chat
+``chat``
+
+This is a discussion between users of the record. It is useful for commenting on content or for making important remarks. You can use it for comments or revisions. 
+
+```json
+"chat": {
+    "lastChange": "2022-09-19T06:33:41",
+    "messages": [
+        {
+            "id": "xhg171vp59",
+            "author": "jack.snow@tabidoo.cloud",
+            "authorName": "Jack Snow",
+            "created": "2022-09-19T06:33:39",
+            "text": "Text 1"
+        }
+    ]
+}
+```
+
+- ``lastChange`` - time of last chat change
+- ``messages`` - array of the chat messages
+    - ``id`` - a unique identifier of the chat message
+    - ``author`` - e-mail of the message creator
+    - ``authorName`` - nickname (or e-mail) of the message creator
+    - ``created`` - the date the message was created
+    - ``text`` - text of the message
+
+### Picture/File
+``picture`` ``file``
+
+Array of attachment pictures/files.
+
+```json 
+"picture": [
+    {
+        "fileId": "3940cd80-1e50-4e97-ab6f-269cc39affe4",
+        "fileName": "Image name",
+        "fileSize": 9422,
+        "mimetype": "image/png",
+        "fileUrl": "https://app.tabidoo.cloud/api/v2/apps/...",
+        "thumbnailUrl": "https://app.tabidoo.cloud/api/v2/apps/..."
+    }
+]
+```
+
+- ``fileId`` - an unique identifier of the file in Tabidoo
+- ``fileName`` - file name
+- ``fileSize`` - file size (bytes)
+- ``mimetype`` - [mimetype](https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types) of the picture (read more about [mimetype](https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types))
+- ``fileUrl`` - URL of the file
+- ``thumbnailUrl`` - URL of the thumbnail of the image (**only for picture datatype**) 
+
+#### Uploading picture/file
+
+You can upload file in several ways. 
+
+##### Add as external URL
+
+Tabidoo will download picture/file from a specific URL.
+
+```json 
+"file": "https://image-url.com/image.png"
+```
+
+##### Add list of files
+
+Files are sent as an array of files. File data are encoded as [Base64 string](https://en.wikipedia.org/wiki/Base64).
+
+```json
+"picture": [
+    {
+        "filename": "Image name",
+        "mimetype": "image/png",
+        "filedata": "data:image/png;base64,ivBORw0KgoAAAAAANSUheUg..."
+    }
+]
+```
+
+##### Adding/Removing files
+
+You can specify files to add and remove in one update step.
+
+```json
+"picture": {
+    "add": [
+        {
+            "filename": "Image name",
+            "mimetype": "image/png",
+            "filedata": "data:image/png;base64,ivBORw0KgoAAAAAANSUheUg..."
+        }
+    ],
+    "remove": [
+        "6578b267-704c-45bb-ef099dec58ef"
+    ]
+}
+```
+
+- ``add`` - array of files
+- ``remove`` - array of IDs of files
+
+### Link to table
+``schema_link``
+
+Link to another table-record. Tabidoo uses 2 types of links (4 types in advanced mode). 
+
+- ``Single record`` - only one record from the linked table can be selected
+- ``Multiple records`` - more records from the linked table can be selected
+
+#### Single record
+
+```json
+"link": {
+    "id": "8f878e8f-1fda-4de4-9e6b-b5844dec7a43",
+    ...
+    "url": "https://app.tabidoo.cloud/api/v2/apps/.../data/8f878e8f-1fda-4de4-9e6b-b5844dec7a43"
+}
+```
+
+- ``id`` - record ID from the linked table
+- ``url`` - API URL for the linked the record
+
+**Insert/Update single record**
+
+```json
+"link": {
+    "id": "dfd51e39-3392-40a0-94c9-b73ef42fef81"
+}
+```
+
+- ``id`` - record ID of the linked table
+
+#### Multiple records
+
+```json
+"links": {
+    "count": 2,
+    "url": "https://app.tabidoo.cloud/api/v2/apps/.../data?linkId=64438767-45f0-40c1-b212-23df1a6eb8c3&linkTableId=1a68b444-2b2d-4ac5-9a2c-656ddc844cfe&linkField=linkToTable"
+}
+```
+
+- ``count`` - linked records count
+- ``url`` - URL API for retrieving linked records
+
+
+##### Insert/Update multiple records
+
+```json
+"links": {
+    "add": ["64438767-45f0-40c1-b212-23df1a6eb8c3"],
+    "remove": ["8f878e8f-1fda-4de4-9e6b-b5844dec7a43"]
+}
+```
+
+- ``add`` - array of ID records to add (_optional_)
+- ``remove`` - array of ID records to delete (_optional_)
+
+### Button
+``buttonform``
+
+This field represents a user-defined button within the form, which triggers a custom action script upon clicking. While the button is visible in the table definition, it does not return any data when fetching records through the API, as its function is solely to execute an action rather than store or provide data.
+
+### Free HTML input
+``freehtmlinput``
+
+This field allows users to create custom components using HTML, CSS, and TypeScript/JavaScript. It provides flexibility for adding complex elements to the form. Similar to the button field, it is visible in the table definition, but it does not return any data in API responses, as its purpose is to render custom content rather than store or return information.
+
+## Filters
+
+You can filter user data by filtering conditions. [Tabidoo](https://tabidoo.cloud) provides two types API methods that use filters:
+- GET methods - filter is sent by **QueryString** (_[Get List of data](#reference/0/user-data/get-list-of-data), [Get Count of data](#reference/0/user-data/get-count-of-data)_)
+- POST methods - filter is sent by **body** (_[Get List of data (filter)](#reference/0/user-data/get-list-of-data-(filter)), [Get Count of data (filter)](#reference/0/user-data/get-count-of-data-(filter))_)
+
+These are the supported filter conditions:
+| Condition   |     Explanation      |  Example (QueryString)
+|----------|:-------------:|:-------------:|
+| contains |  Contains | ```firstname(contains)Georg``` |
+| notcontains |    Not contains   | ```firstname(notcontains)Georg``` |
+| startswith | Starts with | ```firsname(startswith)g``` |
+| endswith | Ends with | ```firstname(endswith)etr```|
+| eq | Equal to | ```firstname(eq)john``` |
+| === | Equal to | ```firstname(===)john``` |
+| neq | Not Equal To | ```firstname(neq)peter``` |
+| empty | Empty (Has no value) | ```firstname(empty)``` |
+| notempty | Not empty (Has value) | ```firstname(notempty)``` |
+| in | Matches any value in a list | ```firstname(in)(John,Peter,text with \\, comma)``` |
+| notin | Not Matches any value in a list | ```firstname(notin)(Oliver,Jack,text with \\, comma)``` |
+| gt | Greater Than | ```age(gt)21``` |
+| lt | Less Than | ```age(lt)21``` |
+| gte | Greater Than or Equal To | ```age(gte)21``` |
+| lte | Less Then or Equal To | ```age(lte)21``` |
+| duplicity | Duplicity (Has no value) | ```firstname(duplicity)``` |
+| currentuser | Current/logged-in user (Has no value) | ```login(currentuser)``` |
+
+### Filter in QueryString
+
+- Simple filter - ```filter=age(gte)21```, 
+- Multi filter (both conditions are true) - ```filter=age(gte)10,surname(eq)Fox```, 
+- Filter with multi values - ```filter=surname(in)(Fox,Dog,text with \\, comma)``` *To filter text containing a comma, such as "text with , comma", you must escape the comma inside the text by a double backslash.*
+
+### Filter in body
+
+- Simple filter
+
+```
+{
+    "filter": [
+    {
+      "field": "age",
+      "operator": "gte",
+      "value": "30"
+    }
+  ]
+}
+```
+
+- Multi filter (both conditions are true)
+
+```
+{
+    "filter": [
+    {
+      "field": "age",
+      "operator": "gte",
+      "value": "30"
+    },
+    {
+      "field": "firstname",
+      "operator": "eq",
+      "value": "Jack"
+    }
+  ]
+}
+```
+
+- Filter with multivalues
+
+*To filter text containing a comma, such as "text with , comma", you must escape the comma inside the text by a double backslash.*
+
+
+```
+{
+    "filter": [
+    {
+      "field": "firstname",
+      "operator": "in",
+      "value": "Jack,Peter,text with \\, comma"
+    }
+  ]
+}
+```
+
+- Advanced filter with nested condition and operators OR and AND
+
+*Find all records where field age equals 25 and field firstname equals Jack or Peter*
+
+```
+{
+    "filter": [
+    {
+        "filter": [
+            {
+                "field": "firstname",
+                "operator": "eq",
+                "value": "Jack"
+            },
+            {
+                "field": "firstname",
+                "operator": "eq",
+                "value": "Peter"
+            }
+        ],
+        "filterOperator": "or"
+    },
+    {
+      "field": "age",
+      "operator": "eq",
+      "value": "25"
+    }
+  ],
+  "filterOperator": "and"
+}
+```
+
+### Filter by link field
+
+- You can filter link fields by using structure *{table}.{field}*.
+
+Consider that you have a car table and link to the driver and you want to filter by the driver´s first name:
+
+```
+...
+"fields": {
+    "name": "My car",
+    "driver": {
+        "id": "5eb4da07-9eb7-49b9-8552-b82dc84c9e8c",
+        "created": "2021-04-12T13:39:24.477Z",
+        "modified": "2021-04-12T13:39:24.478Z",
+        "ver": 0,
+        "fields": {
+            "firstname": "John",
+            "surname": "Newman",
+            ...
+                        
+```
+
+You can use this simple filter - ```filter=driver.firstname(eq)John```
+
+### Filter by view settings
+
+If you have defined a table view setting for a table, you can use this setting to filter the data. Example of using the querystring parameter to set the filter - ```userFilter=xil9gznz16```.
+You can use the [Get table](#reference/0/tables/get-table) endpoint to get the ID of the view settings (*Response parameter data -> settings -> userFilters*).
+
+## Parameters
+
+### Upsert mode
+
+Tabidoo API CREATE/UPDATE endpoints (including bulk endpoints) support **two upsert modes**:
+
+- The CREATE endpoints (create data record, create data records - bulk) enable UPSERT mode - UPSERT for CREATE endpoints is driven by the 'Import key field' (one field of the table marked as 'Import key field' in the table/fields settings - unique record identifier for data import) - the passed-in record has to have non-empty value in the field marked as 'Import key field' then this value is used for search for the record in the DB, if the record exists then it is updated, otherwise a new record is created (inserted). If the passed-in record has no value in the field marked as 'Import key field' then CREATE UPSERT raises an error.
+- The UPDATE endpoints (update data record partial/full, update data records partial/full - bulk) enable UPSERT mode - UPSERT for UPDATE endpoints is driven by record ID - if the passed-in record has no id or the record is not found in the DB by id then a new record is created (inserted), otherwise found record is updated.
+
+How to enable Upsert mode - example request body:
+
+```json 
+{
+    "fields": {
+        "age": 39
+    },
+    "useUpsert": true
+}
+```
+
+Or example request body for bulk endpoints:
+
+```json 
+{
+    "bulk": [
+        {
+            "fields": {
+                "firstname": "Jack",
+                "surname": "Newman"
+            }
+        }
+    ],
+    "useUpsert": true
+}
+```
+
+### Skip audit data
+
+In case the changes are frequent and extensive, it can be useful to avoid messing up audit data. History for the table.
+
+How to skip audit - example request body:
+
+```json 
+{
+    "fields": {
+        "age": 39
+    },
+    "skipAudit": true
+}
+```
+
+### Data response type
+
+Response body of the Create and Update endpoints contains a newly created or updated record. Example of a default response body:
+
+```json
+{
+  "fields": {
+    "firstname": "Jack",
+    "surname": "Snow",
+    "age": 41
+  }
+}
+```
+
+You can change the default settings by adding the query string parameter ```?dataResponseType={type-of-response}```
+
+Tabidoo offer these Data response types:
+
+- **All** - the response body contains all fields of the record *(default for **single** Create and Update endpoints, not allowed for **bulk** endpoints)*.
+- **MetadataOnly** - only metadata is returned in the response body *(record ID(s), created/modified time, ...)*.
+- **None** - no data is returned in the response body (default for bulk operations)
+
+## Ping test [/ping]
+If you want to quickly test whether you have everything well set up, try that simple Ping request.
+
+### Ping [GET]
+
++ Request 
+
+    + Headers
+            
+            Authorization: Bearer <jwt-token>
+
++ Response 200 (application/json)
+
+    + Attributes
+        + data (Ping) - Ping object
+    
+    + Body
+    
+            {
+                "data": {
+                    "message": "Tabidoo ping OK"
+                }
+            }
+
+
+## Applications [/apps]
+Resources for getting applications
+
+### Get List of Applications [GET]
+Get all the user's applications
+
++ Response 200
+
+    + Attributes
+        + data (array[ApplicationSimple]) - List of the applications
+        
+    + Body
+    
+            {
+                "data": [
+                {
+                    "id": "3352d3ce-0ace-44fa-b8d6-1e0ab1f0d789",
+                    "name": "Task & Project Management",
+                    "internalName": "taskAndProjectManagement"
+                },
+                {
+                    "id": "984ce49c-abdb-4598-ae3f-99c50f130a47",
+                    "name": "Helpdesk",
+                    "internalName": "helpdesk"
+                }
+                ]
+            }
+
+### Get Application [GET /apps/{app_id}]
+Get application by ID or internal name
+
++ Parameters 
+    + app_id (string) - ID or internal name of the application
+
++ Response 200
+
+    + Attributes
+        + data (Application) - Application object
+        
+    + Body
+    
+            {
+                "data":
+                {
+                    "id": "3352d3ce-0ace-44fa-b8d6-1e0ab1f0d789",
+                    "name": "Task & Project Management"
+                    "internalName": "taskAndProjectManagement"
+                }
+            }
+
+
+## Tables [/apps/{app_id}/tables]
+Resources for getting table definitions.
+
++ Parameters
+    + app_id (string, required) - ID or internal name of the application
+
+### Get List of tables [GET]
+Get all tables of the application.
+
++ Response 200
+
+    + Attributes
+        + data (array[Table]) - List of tables of one application
+            
+    + Body
+    
+            { 
+                "data": [
+                {
+                    "id": "2252d3ce-0bce-44fa-b8d6-1e0ab1f0c277",
+                    "shortid": "xbo9aya392",
+                    "header": "Customers",
+                    "items": [
+                        {
+                            "name": "firstname",
+                            "header": "Firstname",
+                            "type": "text",
+                            "metadata": {
+                                "description": "Firstname of customer",
+                                "maxLength": 100,
+                                "required": true
+                            }
+                        },
+                        {
+                            "name": "surname",
+                            "header": "Surname",
+                            "type": "text",
+                            "metadata": {
+                                "description": "Surname of customer",
+                                "maxLength": 100,
+                                "required": true
+                            }
+                        },
+                        {
+                            "name": "age",
+                            "header": "Age",
+                            "type": "number",
+                            "metadata": {
+                                "description": "Age of customer",
+                                "min": 18,
+                                "max": 99,
+                                "required": false
+                            }
+                        }
+                    ]
+                },
+                {
+                    "id": "334ce49c-cfdb-4598-ae3f-99c50f1306a4",
+                    "shortid": "x8ahlhs1ii",
+                    "header": "Cars",
+                    "items": [
+                        {
+                            "name": "identifier",
+                            "header": "Identifier",
+                            "type": "text",
+                            "metadata": {
+                                "description": "Identifier of car",
+                                "maxLength": 100,
+                                "required": true
+                            }
+                        },
+                        {
+                            "name": "brand",
+                            "header": "Brand",
+                            "type": "dropdown",
+                            "metadata": {
+                                "description": "Car brand",
+                                "required": true,
+                                "items": [ 
+                                    {
+                                        "value": "BMW",
+                                        "order": 0
+                                    },
+                                    {
+                                        "value": "Audi",
+                                        "order": 1
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+                ]
+            }
+
+### Get table [GET /apps/{app_id}/tables/{table_id}]
+
+Get one table of the application.
+
++ Parameters 
+    + app_id (string) - ID or internal name of the application
+    + table_id (string) - ID of the table
+
++ Response 200
+
+    + Attributes
+        + data (Table) - Table object
+
+    + Body
+
+            { 
+                "data": {
+                    "id": "2252d3ce-0bce-44fa-b8d6-1e0ab1f0c277",
+                    "shortid": "xbo9aya392",
+                    "header": "Customers",
+                    "items": [
+                        {
+                            "id": "firstname",
+                            "header": "Firstname",
+                            "type": "text",
+                            "metadata": {
+                                "description": "Firstname of customer",
+                                "maxLength": 100,
+                                "required": true
+                            }
+                        },
+                        {
+                            "id": "surname",
+                            "header": "Surname",
+                            "type": "text",
+                            "metadata": {
+                                "description": "Surname of customer",
+                                "maxLength": 100,
+                                "required": true
+                            }
+                        },
+                        {
+                            "id": "age",
+                            "header": "Age",
+                            "type": "number",
+                            "metadata": {
+                                "description": "Age of customer",
+                                "min": 18,
+                                "max": 99,
+                                "required": false
+                            }
+                        }
+                    ],
+                    "settings": {
+                        "userFilters": [
+                            {
+                                "id": "xil9gznz16",
+                                "name": "New Customers",
+                                "description": "New Customers",
+                                "visibility": "global"
+                            }
+                        ]
+                    },
+                    "scripts": [
+                        { 
+                            "name": "onModelLoad",
+                            "script": "doo.model.<[Firstname (firstname)]>.value = 'John';"
+                        }
+                    ]
+                }
+            }
+
+## Records [/apps/{app_id}/tables/{table_id}/data{?limit,skip,sort,filter}]
+Resources for CRUD operations with data.
+
++ Parameters
+    + app_id (string, required) - ID of the application
+    + table_id (string) - ID of the table
+    + limit (optional, number) - The number of records returned in each request. Accepts any value between 0 and 1000.
+        + Default: `25`
+    + skip (optional, number) - Which record in the list to start from. The value should be greater than or equal to 0.
+        + Default: `0`
+    + sort (optional, string) - A list of sort table fields which are used to sort the retrieved record. 
+    Simple sorting - ``sort=age``, Multi sorting - ``sort=age,surname(desc)``
+    + filter (optional, string) - Filter condition (where condition). 
+    Simple filter - ``filter=age(gte)10``, 
+    Multi filter - ``filter=age(gte)10,surname(eq)Fox``, 
+    Filter with multivalues - ``filter=surname(in)(Fox,Dog,text with \\, comma)``
+        + Members
+            + `contains`
+            + `notcontains`
+            + `startswith`
+            + `endswith`
+            + `eq`
+            + `===`
+            + `neq`
+            + `empty`
+            + `notempty`
+            + `in`
+            + `notin`
+            + `gt`
+            + `lt`
+            + `gte`
+            + `lte`
+            + `duplicity`
+            + `currentuser`
+
+### Get List of data [GET]
+**[GET]** 
+
+To receive the list of data from a table.
+
+For more information on filters, [click here](#introduction/filters).
+
++ Response 200 (application/json)
+
+    + Attributes 
+        + data (array[Record]) - Array of data/records
+
+    + Body
+        
+            { 
+                "data": [
+                    {
+                        "id": "158cb6ef-02a6-47dc-8134-188c1b6426e6",
+                        "created": "2019-03-22T14:41:23.5783244+00:00",
+                        "modified": "2019-03-24T16:31:28.5783244+00:00",
+                        "ver": 0,
+                        "fields": {
+                            "firstname": "John",
+                            "surname": "Snow",
+                            "age": 35
+                        }
+                    },
+                    {
+                        "id": "8095b72f-5642-4a75-b4f7-5ba11da65ea2",
+                        "created": "2019-03-22T14:41:23.5783244+00:00",
+                        "modified": "2019-03-24T16:31:28.5783244+00:00",
+                        "ver": 0,
+                        "fields": {
+                            "firstname": "Peter",
+                            "surname": "Parker",
+                            "age": 28
+                        }
+                    },
+                    {
+                        "id": "8905f3aa-97df-4c0b-b10f-d5fe3bcd6979",
+                        "created": "2019-03-22T14:41:23.5783244+00:00",
+                        "modified": "2019-03-24T16:31:28.5783244+00:00",
+                        "ver": 2,
+                        "fields": {
+                            "firstname": "Jack",
+                            "surname": "Reacher",
+                            "age": 42
+                        }
+                    }
+                ]
+            }
+
+### Get List of data (filter) [POST /apps/{app_id}/tables/{table_id}/data/filter{?limit,skip,sort}]
+**[POST]**
+
+To receive the list of data from a table with filter conditions sending in the body.
+
+You can also specify which fields should be loaded using the ``loadFields`` parameter. If not provided, all fields will be returned.
+
+For more information on filters, [click here](#introduction/filters).
+
++ Request 
+
+    + `loadFields` (optional) - load only specific fields
+    + `filter` (optional) - for more information on filters [click here](#introduction/filters)
+
+    + Body 
+    
+            {
+                "filter": [
+                    { 
+                        "field": "age",
+                        "operator": "gte",
+                        "value": "30"
+                    }   
+                ],
+                "loadFields": ["name", "age"]
+            }
+
++ Response 200 (application/json)
+
+    + Attributes 
+        + data (array[Record]) - Array of data/records
+
+    + Body
+        
+            { 
+                "data": [
+                    {
+                        "id": "158cb6ef-02a6-47dc-8134-188c1b6426e6",
+                        "created": "2019-03-22T14:41:23.5783244+00:00",
+                        "modified": "2019-03-24T16:31:28.5783244+00:00",
+                        "ver": 0,
+                        "fields": {
+                            "firstname": "John",
+                            "surname": "Snow",
+                            "age": 35
+                        }
+                    },
+                    {
+                        "id": "8905f3aa-97df-4c0b-b10f-d5fe3bcd6979",
+                        "created": "2019-03-22T14:41:23.5783244+00:00",
+                        "modified": "2019-03-24T16:31:28.5783244+00:00",
+                        "ver": 2,
+                        "fields": {
+                            "firstname": "Jack",
+                            "surname": "Reacher",
+                            "age": 42
+                        }
+                    }
+                ]
+            }
+
+### Get count of data [GET /apps/{app_id}/tables/{table_id}/data/count{?filter}]
+**[GET]**
+
+Get the number of records in the table.
+
+For more information on filters, [click here](#introduction/filters).
+
+Example request: 
+
+``https://app.tabidoo.cloud/v2/apps/158cb6ef/tables/8095b72f/data/count``
+
+
++ Response 200
+
+    + Attributes 
+        + data - Count object
+            + count: 3 (number) - Count of records
+
+    + Body
+        
+            { 
+                "data": {
+                        "count": 3
+                }
+            }
+
+### Get count of data (filter) [POST /apps/{app_id}/tables/{table_id}/data/count/filter]
+**[POST]**
+
+Get the number of records in the table with filter conditions sending in the body.
+
+For more information about filters, [click here](#introduction/filters).
+
++ Request 
+
+    + Body 
+    
+            {
+                "filter": [
+                    { 
+                        "field": "age",
+                        "operator": "gte",
+                        "value": "30"
+                    }   
+                ]
+            }
+
++ Response 200
+
+    + Attributes 
+        + data - Count object
+            + count: 3 (number) - Count of records
+
+    + Body
+        
+            { 
+                "data": {
+                        "count": 3
+                }
+            }
+
+### Get data summary [POST /apps/{app_id}/tables/{table_id}/data/summary]
+**[POST]**
+
+Get summary data from a table with filter conditions and required aggregations (min/max/sum/avg for numbers and min/max for date-time) sending in the body.
+Only number and date/date-time fields are supported. Aggregations min/max/sum/avg are supported for numbers. Aggregations min/max are supported for date/date-time.
+
+For more information about filters, [click here](#introduction/filters).
+
++ Request 
+
+    + Body 
+    
+            {
+                "filter": [
+                    { 
+                        "field": "age",
+                        "operator": "gte",
+                        "value": "30"
+                    }   
+                ],
+                "fields": {
+                    "age": { aggregations: ["min", "max", "sum", "avg"] },
+                    "dateOfBirth": { aggregations: ["min", "max"] },
+                    "someNumber": { aggregations: ["avg"] },
+                    "dateOfEmployment": { aggregations: ["min"] }
+                }
+            }
+
++ Response 200
+
+    + Attributes 
+        + data - Summary object
+            + count: 3 (number) - Count of records
+            + fields (object) - Dynamic object of aggregated fields
+
+    + Body
+        
+            { 
+                "data": {
+                    "count": 3,
+                    "fields": {
+                        "age": {
+                            "min": 31,
+                            "max": 44,
+                            "sum": 111,
+                            "avg": 37,
+                        },
+                        "dateOfBirth": {
+                            "min": "1980-05-23T00:00:00Z",
+                            "max": "1994-07-03T00:00:00Z",
+                        },
+                        "someNumber": {
+                            "avg": 24
+                        },
+                        "dateOfEmployment": {
+                            "avg": "2002-11-11T12:34:56Z"
+                        }
+                    }
+                }
+            }
+
+### Get data record [GET /apps/{app_id}/tables/{table_id}/data/{record_id}]
+**[GET]**
+
+To retrieve a single record.
+
++ Parameters
+    + record_id (string) - ID of data record
+
++ Response 200
+
+    + Attributes
+        + data (Record) - Record object
+
+    + Body
+    
+            { 
+                "data": {
+                        "id": "158cb6ef-02a6-47dc-8134-188c1b6426e6",
+                        "created": "2019-03-22T14:41:23.5783244+00:00",
+                        "modified": "2019-03-24T16:31:28.5783244+00:00",
+                        "ver": 0,
+                        "fields": {
+                            "firstname": "John",
+                            "surname": "Snow",
+                            "age": 35
+                        }
+                }
+            }
+
+### Create data record [POST /apps/{app_id}/tables/{table_id}/data{?dataResponseType}]
+**[POST]**
+
+Creates a new record in a specific Tabidoo table.
+
+This endpoint supports **UPSERT** mode - see the **useUpsert** parameter.
+
++ Parameters
+    + dataResponseType (optional, string) - Data response type. *None* - no data is returned, *MetadataOnly* - only metadata is returned, *All* - all fields of the record
+
++ Request
+
+    + Body
+    
+            { 
+                "fields": {
+                    "firstname": "John",
+                    "surname": "Snow",
+                    "age": 35
+                }
+            }
+
++ Response 201
+
+    + Attributes
+        + data (Record) - Record object
+
+    + Body
+    
+            {
+                "data": {
+                    "id": "158cb6ef-02a6-47dc-8134-188c1b6426e6",
+                    "created": "2019-03-22T14:41:23.5783244+00:00",
+                    "modified": "2019-03-22T14:41:23.5783244+00:00",
+                    "ver": 0,
+                    "fields": {
+                        "firstname": "John",
+                        "surname": "Snow",
+                        "age": 35
+                    }
+                }
+            }
+
+### Update data record (PARTIAL) [PATCH /apps/{app_id}/tables/{table_id}/data/{record_id}{?dataResponseType}]
+**[PATCH]**
+
+Updates an existing record in a specific Tabidoo table. 
+
+This endpoint supports **UPSERT** mode - see the **useUpsert** parameter.
+
+This is a **PARTIAL update** - it only updates the fields that are sent.
+
+**TIP** - [Upsert mode](#introduction/parameters/upsert-mode).
+
++ Parameters
+    + record_id (string) - ID of data record
+    + dataResponseType (optional, string) - Data response type. *None* - no data is returned, *MetadataOnly* - only metadata is returned, *All* - all fields of the record
+    
++ Request
+
+    + Body
+    
+            { 
+                "fields": {
+                    "age": 39
+                }
+            }
+
++ Response 200
+    
+    + Attributes
+        + data (Record) - Record object
+
+    + Body
+    
+            {
+                "data": {
+                    "id": "158cb6ef-02a6-47dc-8134-188c1b6426e6",
+                    "created": "2019-03-22T14:41:23.5783244+00:00",
+                    "modified": "2019-03-25T17:22:26.5783244+00:00",
+                    "ver": 1,
+                    "fields": {
+                        "firstname": "John",
+                        "surname": "Snow",
+                        "age": 39
+                    }
+                }
+            }
+
+### Update data record (FULL) [PUT /apps/{app_id}/tables/{table_id}/data/{record_id}{?dataResponseType}]
+**[PUT]**
+
+Updates an existing record in a specific Tabidoo table. 
+
+This endpoint supports **UPSERT** mode - see the **useUpsert** parameter.
+
+This is a **FULL update** - it replaces the whole record with sent fields, thus unsent fields are deleted.
+
+**TIP** - [Upsert mode](#introduction/parameters/upsert-mode).
+
++ Parameters
+    + record_id (string) - ID of data record
+    + dataResponseType (optional, string) - Data response type. *None* - no data is returned, *MetadataOnly* - only metadata is returned, *All* - all fields of the record
+    
++ Request
+
+    + Body
+    
+            { 
+                "fields": {
+                    "firstname": "Jack",
+                    "surname": "Snow",
+                    "age": 41
+                }
+            }
+
++ Response 200
+
+    + Attributes
+        + data (Record) - Record object
+
+    + Body
+    
+            {
+                "data": {
+                    "id": "158cb6ef-02a6-47dc-8134-188c1b6426e6",
+                    "created": "2019-03-22T14:41:23.5783244+00:00",
+                    "modified": "2019-03-25T17:22:26.5783244+00:00",
+                    "ver": 2,
+                    "fields": {
+                        "firstname": "Jack",
+                        "surname": "Snow",
+                        "age": 41
+                    }
+                }
+            }
+
+### Delete data record [DELETE /apps/{app_id}/tables/{table_id}/data/{record_id}]
+**[DELETE]**
+
+Deletes a single record in a specific Tabidoo table.
+
++ Parameters
+    + record_id (string) - ID of data record
+    
++ Response 204
+
+## Records - bulk [/apps/{app_id}/tables/{table_id}/data/bulk{?dataResponseType}]
+Resources for bulk operations with data.
+
++ Parameters
+    + app_id (string, required) - ID of the application
+    + table_id (string) - ID of the table
+    + dataResponseType (optional, string) - Data response type. *None* - no data are returned, *MetadataOnly* - Only metadata are returned
+
+### Create data records - bulk [POST /apps/{app_id}/tables/{table_id}/data/bulk{?dataResponseType}]
+**[POST]**
+
+Creates records in a specific Tabidoo table.
+
+This endpoint supports **UPSERT** mode - see the **useUpsert** parameter.
+In **UPSERT** mode, some records can be inserted and some can be updated.
+
+**TIP** - [Data response type](#introduction/parameters/data-response-type).
+
++ Parameters
+    + dataResponseType (optional, string) - Data response type. *None* - no data is returned, *MetadataOnly* - only metadata is returned
+
++ Request
+
+    + Body
+    
+            {
+                "bulk": [
+                            {
+                                "fields": {
+                                    "firstname": "Jack",
+                                    "surname": "Newman"
+                                }
+                            },
+                            {
+                                "fields": {
+                                    "firstname": "Peter",
+                                    "surname": "Novak"
+                                }
+                            }
+                ]
+            }
+
++ Response 200
+
+    This example shows that two records were inserted.
+
+    In **UPSERT** mode, some records can be inserted and some can be updated.
+
+    + Body
+    
+            {
+                "bulk": {
+                    "successCount": 2,
+                    "insertedCount": 2
+                },
+                "data": [
+                    {
+                        "id": "158cb6ef-02a6-47dc-8134-188c1b6426e6",
+                        "created": "2019-03-22T14:41:23.5783244+00:00",
+                        "modified": "2019-03-25T17:22:26.5783244+00:00",
+                        "ver": 0,
+                        "fields": {
+                            "firstname": "Jack",
+                            "surname": "Newman"
+                        }
+                    },
+                    {
+                        "id": "2f64141a-ec9f-43df-a50d-1ca8eb277df7",
+                        "created": "2019-03-22T14:41:23.5783244+00:00",
+                        "modified": "2019-03-25T17:22:26.5783244+00:00",
+                        "ver": 0,
+                        "fields": {
+                            "firstname": "Peter",
+                            "surname": "Novak"
+                        }
+                    }
+                ],
+                "errors": [
+                    {
+                        "type": "string",
+                        "id": "string",
+                        "message": "string"
+                    }
+                ]
+            }
+            
+### Update data records - bulk (PARTIAL) [PATCH /apps/{app_id}/tables/{table_id}/data/bulk{?dataResponseType}]
+**[PATCH]**
+
+Updates records in a specific Tabidoo table.
+
+This endpoint supports **UPSERT** mode - see the **useUpsert** parameter.
+In **UPSERT** mode, some records can be inserted and some can be updated.
+
+This is a **PARTIAL update** - it only updates the fields that are sent.
+
+**WARN** - If the id is empty or the record is not found in the table, the record is ignored/skipped without reporting.
+
+**TIP** - [Upsert mode](#introduction/parameters/upsert-mode).
+
++ Parameters
+    + dataResponseType (optional, string) - Data response type. *None* - no data is returned, *MetadataOnly* - only metadata is returned
+
++ Request
+
+    + Body
+    
+            {
+                "bulk": [
+                            {
+                                "id": "158cb6ef-02a6-47dc-8134-188c1b6426e6",
+                                "fields": {
+                                    
+                                    "firstname": "Jack",
+                                    "surname": "Newman"
+                                }
+                            },
+                            {
+                                "id": "2f64141a-ec9f-43df-a50d-1ca8eb277df7",
+                                "fields": {
+                                    "firstname": "Peter",
+                                    "surname": "Novak"
+                                }
+                            },
+                            {
+                                "id": "abdf9ff3-4b1a-42ae-92df-d394577354f7",
+                                "fields": {
+                                    "firstname": "Lucas",
+                                    "surname": "Pear"
+                                }
+                            }
+                ]
+            }
+
++ Response 200
+
+    This example shows that three records were sent for bulk update, two recorde were updated and one record was not updated (it was unchanged or it does not exist).
+    
+    In **UPSERT** mode, some records can be inserted and some can be updated.
+
+    + Body
+    
+            {
+                "bulk": {
+                    "successCount": 3,
+                    "insertedCount": 0,
+                    "updatedCount": 2
+                },
+                "data": [
+                    {
+                        "id": "158cb6ef-02a6-47dc-8134-188c1b6426e6",
+                        "created": "2019-03-22T14:41:23.5783244+00:00",
+                        "modified": "2019-03-25T17:22:26.5783244+00:00",
+                        "ver": 0,
+                        "fields": {
+                            "firstname": "Jack",
+                            "surname": "Newman"
+                        }
+                    },
+                    {
+                        "id": "2f64141a-ec9f-43df-a50d-1ca8eb277df7",
+                        "created": "2019-03-22T14:41:23.5783244+00:00",
+                        "modified": "2019-03-25T17:22:26.5783244+00:00",
+                        "ver": 0,
+                        "fields": {
+                            "firstname": "Peter",
+                            "surname": "Novak"
+                        }
+                    }
+                ],
+                "errors": [
+                    {
+                        "type": "string",
+                        "id": "string",
+                        "message": "string"
+                    }
+                ]
+            }
+            
+### Update data records - bulk (FULL) [PUT /apps/{app_id}/tables/{table_id}/data/bulk{?dataResponseType}]
+**[PUT]**
+
+Updates records in a specific Tabidoo table.
+
+This endpoint supports **UPSERT** mode - see the **useUpsert** parameter.
+In **UPSERT** mode, some records can be inserted and some can be updated.
+
+This is a **FULL update** - it replaces the whole record with sent fields, thus unsent fields are deleted.
+
+**WARN** - If the id is empty or the record is not found in the table, the record is ignored/skipped without reporting.
+
+**TIP** - [Upsert mode](#introduction/parameters/upsert-mode).
+
++ Parameters
+    + dataResponseType (optional, string) - Data response type. *None* - no data is returned, *MetadataOnly* - only metadata is returned
+
++ Request
+
+    + Body
+    
+            {
+                "bulk": [
+                            {
+                                "id": "c7609e47-a63c-4d6a-a4c3-3d8253dbf443",
+                                "fields": {
+                                    "firstname": "Jack",
+                                    "surname": "Newman"
+                                }
+                            },
+                            {
+                                "id": "2f64141a-ec9f-43df-a50d-1ca8eb277df7",
+                                "fields": {
+                                    "firstname": "Peter",
+                                    "surname": "Novak"
+                                }
+                            },
+                            {
+                                "id": "abdf9ff3-4b1a-42ae-92df-d394577354f7",
+                                "fields": {
+                                    "firstname": "Thomas",
+                                    "surname": "Pear"
+                                }
+                            }
+                ]
+            }
+
++ Response 200
+
+    This example shows that three records were sent for bulk update, two recorde were updated and one record was not updated (it was unchanged or it does not exist).
+    
+    In **UPSERT** mode, some records can be inserted and some can be updated.
+
+    + Body
+    
+            {
+                "bulk": {
+                    "successCount": 3,
+                    "insertedCount": 0,
+                    "updatedCount": 2
+                },
+                "data": [
+                    {
+                        "id": "158cb6ef-02a6-47dc-8134-188c1b6426e6",
+                        "created": "2019-03-22T14:41:23.5783244+00:00",
+                        "modified": "2019-03-25T17:22:26.5783244+00:00",
+                        "ver": 0,
+                        "fields": {
+                            "firstname": "Jack",
+                            "surname": "Newman"
+                        }
+                    },
+                    {
+                        "id": "2f64141a-ec9f-43df-a50d-1ca8eb277df7",
+                        "created": "2019-03-22T14:41:23.5783244+00:00",
+                        "modified": "2019-03-25T17:22:26.5783244+00:00",
+                        "ver": 0,
+                        "fields": {
+                            "firstname": "Peter",
+                            "surname": "Novak"
+                        }
+                    }
+                ],
+                "errors": [
+                    {
+                        "type": "string",
+                        "id": "string",
+                        "message": "string"
+                    }
+                ]
+            }
+            
+### Delete data record - bulk [DELETE /apps/{app_id}/tables/{table_id}/data/bulk{?limit,filter}]
+**[DELETE]**
+
+Deletes data records in a specific Tabidoo table.
+
+Bulk delete request requires the "Limit" query string parameter. Bulk delete can use condition filters located in the query string.
+
++ Parameters
+    + limit (number) - The number of records to delete. Accepts any value between 1 and 2147483647.
+    + filter (optional, string) - Filter condition (where condition). 
+    Simple filter - ``filter=age(gte)10``, 
+    Multi filter - ``filter=age(gte)10,surname(eq)Fox``, 
+    Filter with multivalues - ``filter=surname(in)(Fox,Dog,text with \\, comma)``
+        + Members
+            + `contains`
+            + `notcontains`
+            + `startswith`
+            + `endswith`
+            + `eq`
+            + `===`
+            + `neq`
+            + `empty`
+            + `notempty`
+            + `in`
+            + `notin`
+            + `gt`
+            + `lt`
+            + `gte`
+            + `lte`
+            + `duplicity`
+            + `currentuser`
+    
++ Response 204
+
+## Files/Images [/apps/{app_id}/tables/{table_id}/files/{file_id}{?token}]
+
+Resources for getting files/images and their thumbnails. 
+
+*For uploading files/images use standard resources **Create data record** and **Update data record***.
+
+[Find out more in the Fields section](#introduction/fields/picture/file).
+
+### Get file [GET]
+
++ Parameters
+    + app_id (string, required) - Application ID
+    + table_id (string) - Table ID
+    + file_id (string) - File ID
+    + token (optional, string) - Security (short) token - *use if it is not possible to send an auth token in the HTTP request header.*
+
++ Response 200
+
++ Response 404
+
+### Get image thumbnail [GET /apps/{app_id}/tables/{table_id}/files/{file_id}/thumbnail{?token}]
+
++ Parameters
+    + app_id (string, required) - Application ID
+    + table_id (string) - Table ID
+    + file_id (string) - File ID
+    + token (optional, string) - Security (short) token - *use if it is not possible to send an auth token in the HTTP request header.*
+
++ Response 200
+
++ Response 404
+
+## Users [/users]
+Resources for getting users info
+
+### Current User Information [GET /users/me]
+Resource allows an authenticated user to retrieve their own profile details, specifically the user ```id``` and ```email``` address. It is commonly used to confirm the currently logged-in user's identity.
+
++ Request 
+
+    + Headers
+            
+            Authorization: Bearer <jwt-token>
+
++ Response 200
+
+    + Attributes
+        + id (string, required) - user's id
+        + email (string, required) - user's email
+        
+    + Body
+    
+            {
+                "data": 
+                {
+                    "id": "3352d3ce-0ace-44fa-b8d6-1e0ab1f0d789",
+                    "email": "john.snow@tabidoo.cloud"
+                }
+            }
+
+
+## Templates [/templates/createDevAppFromProdApp]
+
+### Create a DEV app from PROD app [POST]
+Allows you to create a development (DEV) application from an existing production (PROD) application. This is useful for introducing a proper development cycle (DEV → PROD), testing new features, and avoiding changes to live applications. 
+For more information on templates, [click here](https://help.tabidoo.cloud/en/article/creating-a-development-app-from-a-production-app).
+
++ Request (application/json)
+    + Attributes
+        + applicationId: `abc86445-048e-4ada-ae48-2ffd531cdcdc` (string) - The ID of the production application from which the DEV version should be created.
+        + overrideExistingTemplateId (optional, string) - Use only if the PROD app was originally created from a template or already has a linked DEV app.
+
++ Response 200 (application/json)
+
+
+# Data Structures
+
+## ApplicationSimple (object)
++ id: `3352d3ce-0ace-44fa-b8d6-1e0ab1f0d78` (string) - Application id
++ name: `Task & Project Management` (string) - Application name
++ internalName: `taskAndProjectManagement` (string) - Internal name of the application
+
+## Application (object)
++ id: `3352d3ce-0ace-44fa-b8d6-1e0ab1f0d78` (string) - Application id
++ name: `Task & Project Management` (string) - Application name
++ internalName: `taskAndProjectManagement` (string) - Internal name of the application
++ modules (array[Module]) - Modules of the application
++ tables (array[Table]) - Tables of the application
+
+## Module (object)
++ shortId: default (string) - Short ID of the module
++ header: Default (string) - Header of the module
++ tableIds: `e641691e-426c-4e27-8760-47f491372962`, `c896587d-1aea-42ae-9944-f424729390a3` (array[string]) - array of table ids
+
+## Table (object) 
++ id: `2252d3ce-0bce-44fa-b8d6-1e0ab1f0c277` (string) - Table ID
++ shortid: xbo9aya392 (string) - Table short id
++ internalNameApi: order (string) - Internal name of the table
++ header: Customers (string) - Table header
++ items (array[Field], optional) - Array of table fields
++ settings (object, optional) - Table settings
+    + userFilters (array[object], optional) - Table view settings (predefined filters/view)
++ scripts (array[object], optional) - Array of the form scripts
+    + name (string, required) - Name of script (onModelLoad, onModelChange, beforeModelSave, afterModelSave)
+    + script (string, required) - Script
+
+## Field (object)
++ name (string) - Field name
++ header (string) - Field header
++ type (string) - Data type of the field
++ metadata (Metadata, optional) - Field metadata
+
+## Metadata (object)
++ description (string, optional) - Field description
++ required (boolean)
++ filterableFields: "id", "name"  (array[string], optional) - An array of filterable link fields (for link fields only).
+
+## Record (object)
++ id: `2252d3ce-0bce-44fa-b8d6-1e0ab1f0c277` (string) - Record ID
++ created: `2019-03-22T14:41:23.5783244+00:00` (string) - The date the record was created
++ modified: `2019-03-24T16:31:28.5783244+00:00` (string) - Date of last modification of the record
++ ver: 0 (number) - Record version
++ fields (object) - Fields of the record (dynamic structure)
+
+## Ping (object) 
++ message: Tabidoo ping OK (string) - Test message from Tabidoo
