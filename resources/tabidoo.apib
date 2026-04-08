@@ -1873,6 +1873,28 @@ For more information on templates, [click here](https://help.tabidoo.cloud/en/ar
 + Response 200 (application/json)
 
 
+## Developers [/apps/getApplicationTypeScriptDefinition]
+
+### Get application TypeScript definition [POST]
+Returns a TypeScript definition generated from the application. This endpoint is intended primarily for developers who need strongly typed integrations, custom scripting, or frontend development support.
+
++ Request (application/json)
+    + Attributes
+        + applicationId (string, required) - The ID of the application for which the TypeScript definition should be generated.
+        + schemaId (string) - The ID of the table for which the TypeScript definition should be generated.
+        + onlyJsFunctions: `false` (boolean, optional) - If set to `true`, returns only JavaScript function definitions.
+
++ Response 200 (application/json)
+     + Attributes
+        + content: `<script>` (string) - Generated TypeScript definition as a string.
+
+    + Body
+
+            {
+                "content": "<script>"
+            }
+
+
 # Data Structures
 
 ## ApplicationSimple (object)
