@@ -27,7 +27,6 @@ class ExportRunner:
         ui: Ui,
         base_url: str,
         token: str,
-        fe_token: str | None,
         language: str,
         timeout_sec: int,
         verbose: bool,
@@ -35,7 +34,6 @@ class ExportRunner:
         self._ui = ui
         self._base_url = base_url
         self._token = token
-        self._fe_token = fe_token
         self._language = language
         self._timeout_sec = timeout_sec
         self._verbose = verbose
@@ -50,23 +48,12 @@ class ExportRunner:
             self._ui.console,
         )
         api = TabidooApi(client)
-        schema_api = None
-        if self._fe_token:
-            schema_client = HttpClient(
-                self._base_url,
-                self._fe_token,
-                self._language,
-                self._timeout_sec,
-                self._verbose,
-                self._ui.console,
-            )
-            schema_api = TabidooApi(schema_client)
         selector = AppSelector(self._ui.console)
         extractor = ScriptExtractor()
         formatter = LlmFormatter()
         tables_formatter = TablesFormatter()
         writer = OutputWriter()
-        tsd_fetcher = TsdFetcher(schema_api, self._base_url) if schema_api else None
+        tsd_fetcher = TsdFetcher(api)
 
         with self._ui.spinner(Text.AUTHENTICATING) as status:
             user = api.get_user()
@@ -93,13 +80,10 @@ class ExportRunner:
 
             progress.update(export_task, description=Text.FETCHING_TSD)
             schema_md: str | None = None
-            if tsd_fetcher is None:
-                self._ui.warning(Text.SKIP_SCHEMA_NO_FE)
-            else:
-                try:
-                    schema_md = tsd_fetcher.fetch(selected.app_id, self._language, app_full)
-                except CliError as exc:
-                    self._ui.warning(Text.SKIP_SCHEMA_ERROR.format(reason=str(exc)))
+            try:
+                schema_md = tsd_fetcher.fetch(selected.app_id)
+            except CliError as exc:
+                self._ui.warning(Text.SKIP_SCHEMA_ERROR.format(reason=str(exc)))
             progress.advance(export_task)
 
             progress.update(export_task, description=Text.BUILDING_TABLES)

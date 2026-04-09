@@ -32,14 +32,12 @@ def export(
     EnvLoader.load(Path.cwd() / EnvDefaults.DOTENV)
 
     token = TokenProvider.read()
-    fe_token = TokenProvider.read_fe_optional()
     normalized_url = UrlNormalizer.normalize(base_url)
 
     runner = ExportRunner(
         ui=ui,
         base_url=normalized_url,
         token=token,
-        fe_token=fe_token,
         language=language,
         timeout_sec=timeout,
         verbose=verbose,

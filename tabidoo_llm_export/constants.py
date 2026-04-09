@@ -29,7 +29,6 @@ class Defaults:
 
 class EnvVar(StrEnum):
     API_TOKEN = "TABIDOO_API_TOKEN"
-    FE_TOKEN = "TABIDOO_FE_TOKEN"
 
 
 class Encoding(StrEnum):
@@ -50,6 +49,7 @@ class ErrorKey(StrEnum):
 
 
 class ApiField(StrEnum):
+    APPLICATION_ID = "applicationId"
     ONLY_JS_FUNCTIONS = "onlyJsFunctions"
     SCHEMA_ID = "schemaId"
 
@@ -94,11 +94,6 @@ class Newline(StrEnum):
     DOUBLE = "\n\n"
 
 
-class PathSegment(StrEnum):
-    APP = "/app/"
-    SCHEMA = "/schema/"
-
-
 class Format(StrEnum):
     ACCEPT_LANGUAGE = "{language};q={quality}"
     APP_NAME = "{name} ({internal})"
@@ -114,9 +109,6 @@ class HeaderName(StrEnum):
     ACCEPT = "Accept"
     CONTENT_TYPE = "Content-Type"
     ACCEPT_LANGUAGE = "Accept-Language"
-    APPINFO = "appinfo"
-    ORIGIN = "Origin"
-    REFERER = "Referer"
     USER_AGENT = "User-Agent"
 
 
@@ -140,7 +132,7 @@ class Endpoint(StrEnum):
     USERS_ME = "/v2/users/me"
     APPS = "/v2/apps"
     APP_DETAIL = "/v2/apps/{app_id}"
-    TSD = "/application/getApplicationTypeScriptDefinition"
+    TSD = "/v2/apps/getApplicationTypeScriptDefinition"
     TABLE_DATA = "/v2/apps/{app_id}/tables/{table}/data"
 
 
@@ -191,13 +183,6 @@ class JsonKey(StrEnum):
     INTERFACE = "interface"
     HEADER = "header"
     CONTENT = "content"
-
-
-class AppInfoKey(StrEnum):
-    APP_ID = "appId"
-    LANGUAGE = "language"
-    CUSTOM_DATA = "customData"
-    BROWSER_LANGUAGE = "browserLanguage"
 
 
 class OutputSuffix(StrEnum):
@@ -338,10 +323,7 @@ class Text(StrEnum):
     SELECT_APP = "Select app (number or app id)"
     INVALID_SELECTION = "Invalid selection. Try again."
     NO_APPS = "No apps returned for this token."
-    MISSING_TOKEN = (
-        "Missing TABIDOO_API_TOKEN or TABIDOO_FE_TOKEN. "
-        "Put one of them into .env in your working directory."
-    )
+    MISSING_TOKEN = "Missing TABIDOO_API_TOKEN. Put it into .env in your working directory."
     BAD_BASE_URL = "Base URL must start with http:// or https://"
     EMPTY_BASE_URL = "Base URL is empty."
     MISSING_APP_ID = "Selected app is missing 'id'."
@@ -353,7 +335,6 @@ class Text(StrEnum):
     JSON_ERROR_POST = "Invalid JSON response from POST {path}"
     TSD_MISSING = "Unexpected TypeScript definition response (missing 'content')."
     TSD_FAILED = "Unable to fetch TypeScript definitions for app or any table."
-    SKIP_SCHEMA_NO_FE = "Skipping full schema export: TABIDOO_FE_TOKEN is not available."
     SKIP_SCHEMA_ERROR = "Skipping full schema export: {reason}"
     CANCELLED = "Cancelled."
     STATS_TITLE = "Export Stats"
@@ -388,7 +369,7 @@ class HelpText(StrEnum):
     APP_ID = "Select app by id (skips interactive selection)."
     OUT_DIR = "Output directory root."
     BASE_URL = "Tabidoo API base URL."
-    LANGUAGE = "Language for appinfo header."
+    LANGUAGE = "Language for request headers."
     NO_INTERACTIVE = "Do not prompt."
     TIMEOUT = "HTTP timeout seconds."
     VERBOSE = "Print request URLs (no secrets)."

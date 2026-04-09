@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import json
 import os
 import re
 from pathlib import Path
 from typing import Any
 
 from .constants import (
-    AppInfoKey,
     Char,
     EnvDefaults,
     EnvVar,
     Encoding,
-    JsonDefaults,
     JsonKey,
     RegexPattern,
     SanitizeDefaults,
@@ -50,16 +47,10 @@ class EnvLoader:
 class TokenProvider:
     @staticmethod
     def read() -> str:
-        for env_var in (EnvVar.API_TOKEN, EnvVar.FE_TOKEN):
-            token = os.environ.get(env_var, SanitizeDefaults.EMPTY).strip()
-            if token:
-                return token
+        token = os.environ.get(EnvVar.API_TOKEN, SanitizeDefaults.EMPTY).strip()
+        if token:
+            return token
         raise InvalidConfigError(Text.MISSING_TOKEN)
-
-    @staticmethod
-    def read_fe_optional() -> str | None:
-        token = os.environ.get(EnvVar.FE_TOKEN, SanitizeDefaults.EMPTY).strip()
-        return token or None
 
 
 class UrlNormalizer:
@@ -86,18 +77,6 @@ class JsonUnwrapper:
         return payload
 
 
-class AppInfoBuilder:
-    @staticmethod
-    def build(app_id: str, language: str) -> str:
-        payload = {
-            AppInfoKey.APP_ID: app_id,
-            AppInfoKey.LANGUAGE: language,
-            AppInfoKey.CUSTOM_DATA: {},
-            AppInfoKey.BROWSER_LANGUAGE: SanitizeDefaults.EMPTY,
-        }
-        return json.dumps(payload, ensure_ascii=True, separators=JsonDefaults.SEPARATORS)
-
-
 class Sanitizer:
     @staticmethod
     def sanitize(value: str) -> str:
@@ -107,10 +86,3 @@ class Sanitizer:
         sanitized = sanitized.strip(SanitizeDefaults.STRIP)
         return sanitized or SanitizeDefaults.FALLBACK
 
-
-class Encoder:
-    @staticmethod
-    def quote(value: str) -> str:
-        from urllib.parse import quote
-
-        return quote(value, safe=SanitizeDefaults.EMPTY)
