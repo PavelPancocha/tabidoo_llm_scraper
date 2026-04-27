@@ -142,8 +142,11 @@ class TableInternal(StrEnum):
 
 
 class FieldType(StrEnum):
+    CALCULATED_CURRENT = "calculated"
     CALCULATED = "calculatedfield"
+    BUTTON_CURRENT = "button"
     BUTTON = "buttonform"
+    FREE_HTML_CURRENT = "freehtml"
     FREE_HTML = "freehtmlinput"
 
 
@@ -171,6 +174,9 @@ class JsonKey(StrEnum):
     JS_SCRIPT = "jsScript"
     TS_SCRIPT = "tsScript"
     FREE_HTML_INIT_SCRIPT = "freeHtmlInitScript"
+    FREE_HTML_CONTENT = "freeHtmlContent"
+    WRITTEN_HTML = "writtenHtml"
+    RUNABLE_HTML = "runableHtml"
     SCRIPTS = "scripts"
     FIELDS = "fields"
     DEFINITION = "definition"
@@ -195,6 +201,7 @@ class MarkdownText(StrEnum):
     TITLE_TSD = "# TypeScript Definitions"
     CODE_FENCE_TS = "```typescript"
     CODE_FENCE_JS = "```javascript"
+    CODE_FENCE_HTML = "```html"
     CODE_FENCE_END = "```"
     TITLE_TABLES = "# Application Tables"
     TITLE_ANALYSIS = "# Application Code Analysis"

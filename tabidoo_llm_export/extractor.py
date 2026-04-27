@@ -22,6 +22,19 @@ from .models import (
 
 
 class ScriptExtractor:
+    _CALCULATED_TYPES = {
+        str(FieldType.CALCULATED_CURRENT),
+        str(FieldType.CALCULATED),
+    }
+    _BUTTON_TYPES = {
+        str(FieldType.BUTTON_CURRENT),
+        str(FieldType.BUTTON),
+    }
+    _FREE_HTML_TYPES = {
+        str(FieldType.FREE_HTML_CURRENT),
+        str(FieldType.FREE_HTML),
+    }
+
     def extract(self, app_structure: dict[str, Any]) -> ExtractedCode:
         app_id = str(app_structure.get(JsonKey.ID, SanitizeDefaults.EMPTY))
         app_name = Format.APP_NAME.format(
@@ -47,26 +60,38 @@ class ScriptExtractor:
             for field in items:
                 if not isinstance(field, dict):
                     continue
-                field_type = field.get(JsonKey.TYPE)
+                field_type = str(field.get(JsonKey.TYPE, SanitizeDefaults.EMPTY))
                 field_name = str(field.get(JsonKey.NAME, SanitizeDefaults.EMPTY))
                 metadata = field.get(JsonKey.METADATA) if isinstance(field.get(JsonKey.METADATA), dict) else {}
 
                 script_meta = metadata.get(JsonKey.SCRIPT) if isinstance(metadata.get(JsonKey.SCRIPT), dict) else {}
-                freehtml_meta = (
+                freehtml_init_meta = (
                     metadata.get(JsonKey.FREE_HTML_INIT_SCRIPT)
                     if isinstance(metadata.get(JsonKey.FREE_HTML_INIT_SCRIPT), dict)
                     else {}
                 )
+                freehtml_content_meta = (
+                    metadata.get(JsonKey.FREE_HTML_CONTENT)
+                    if isinstance(metadata.get(JsonKey.FREE_HTML_CONTENT), dict)
+                    else {}
+                )
 
-                if field_type in (FieldType.CALCULATED, FieldType.BUTTON):
+                if field_type in self._CALCULATED_TYPES or field_type in self._BUTTON_TYPES:
                     fragment = self._fragment_from_meta(table_name, field_name, script_meta)
                     if fragment:
                         fragments.append(fragment)
 
-                if field_type == FieldType.FREE_HTML:
-                    fragment = self._fragment_from_meta(table_name, field_name, freehtml_meta)
+                if field_type in self._FREE_HTML_TYPES:
+                    fragment = self._fragment_from_meta(table_name, field_name, freehtml_init_meta)
                     if fragment:
                         fragments.append(fragment)
+                    html_fragment = self._fragment_from_html_meta(
+                        table_name,
+                        field_name,
+                        freehtml_content_meta,
+                    )
+                    if html_fragment:
+                        fragments.append(html_fragment)
 
             scripts = table.get(JsonKey.SCRIPTS)
             if isinstance(scripts, list):
@@ -110,6 +135,22 @@ class ScriptExtractor:
                 field_name=field_name,
                 code_js=js if isinstance(js, str) else SanitizeDefaults.EMPTY,
                 code_ts=ts if isinstance(ts, str) else SanitizeDefaults.EMPTY,
+            )
+        return None
+
+    def _fragment_from_html_meta(
+        self, table: str, field_name: str, meta: dict[str, Any]
+    ) -> Optional[ExtractedCodeFragment]:
+        written_html = meta.get(JsonKey.WRITTEN_HTML)
+        runable_html = meta.get(JsonKey.RUNABLE_HTML)
+        html = written_html if isinstance(written_html, str) and written_html.strip() else runable_html
+        if isinstance(html, str) and html.strip():
+            return ExtractedCodeFragment(
+                table=table,
+                field_name=field_name,
+                code_js=SanitizeDefaults.EMPTY,
+                code_ts=SanitizeDefaults.EMPTY,
+                code_html=html,
             )
         return None
 

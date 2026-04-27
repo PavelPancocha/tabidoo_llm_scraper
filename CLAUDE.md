@@ -153,6 +153,8 @@ Schema fetcher for `/v2/apps/getApplicationTypeScriptDefinition`.
 
 **Important Behavior**:
 - Supports both JS-only and TS-only field/table scripts
+- Supports current and legacy field type names for calculated fields, buttons, and free HTML fields
+- Exports free HTML field content as HTML when `freeHtmlContent` is present
 - Recurses through nested workflow containers such as `foreach -> workflowDefinition -> steps`
 - Preserves custom script `.d.ts` definitions alongside runnable code
 
@@ -168,6 +170,7 @@ Formats extracted code into the final `*-scripts.md` bundle.
 **Important Behavior**:
 - Renders TypeScript when present
 - Falls back to JavaScript when TypeScript is absent
+- Renders free HTML field content as HTML
 - Includes custom script definitions (`dts`) and runnable script blocks
 
 #### `TablesFormatter`
@@ -302,7 +305,7 @@ llm_bytes: int
 - `HttpStatus` - HTTP status codes
 - `HttpMethod` - GET, POST
 - `Encoding` - UTF-8
-- `FieldType` - calculatedfield, buttonform, freehtmlinput
+- `FieldType` - current and legacy names for calculated fields, buttons, and free HTML fields
 - `WorkflowStepType` - jsScript
 - `TableInternal` - wascenarios, customScripts
 
@@ -1308,7 +1311,7 @@ ruff format .
 # Field object
 {
   "name": str,                  # Field name
-  "type": str,                  # Field type (calculatedfield, buttonform, etc.)
+  "type": str,                  # Field type (calculated, button, freehtml, or legacy aliases)
   "metadata": {
     "script": {                 # For calculated fields
       "jsScript": str,
@@ -1317,6 +1320,10 @@ ruff format .
     "freeHtmlInitScript": {     # For free HTML fields
       "jsScript": str,
       "tsScript": str
+    },
+    "freeHtmlContent": {        # For free HTML field markup
+      "writtenHtml": str,
+      "runableHtml": str
     }
   }
 }

@@ -30,7 +30,7 @@ Default output (overridable via CLI flags):
 - `<app-name>-tables.md`
   - Markdown overview grouped by modules with table metadata and field navigation
 - `<app-name>-scripts.md`
-  - Markdown bundle of app scripts prepared for LLM input
+  - Markdown bundle of app scripts prepared for LLM input, including table scripts, field formulas, button scripts, free HTML field code, workflows, and custom scripts
 
 ## Requirements
 

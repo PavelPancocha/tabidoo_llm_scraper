@@ -49,6 +49,7 @@ class ExtractedCodeFragment:
     field_name: str
     code_js: str
     code_ts: str
+    code_html: str = ""
 
 
 @dataclass(frozen=True)

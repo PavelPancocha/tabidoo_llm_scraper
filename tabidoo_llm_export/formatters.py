@@ -29,7 +29,7 @@ class LlmFormatter:
             sections.append(MarkdownText.BLOCK_PREFIX.format(index=idx) + Newline.LF)
             sections.append(MarkdownText.TABLE_LABEL.format(name=block.table))
             sections.append(MarkdownText.FIELD_LABEL.format(name=block.field_name) + Newline.LF)
-            sections.extend(self._render_code_block(block.code_ts, block.code_js))
+            sections.extend(self._render_code_block(block.code_ts, block.code_js, block.code_html))
 
         if workflows:
             sections.append(f"{MarkdownText.TITLE_WORKFLOW}{Newline.DOUBLE}")
@@ -57,11 +57,17 @@ class LlmFormatter:
         return Newline.LF.join(sections)
 
     @staticmethod
-    def _render_code_block(code_ts: str, code_js: str) -> list[str]:
+    def _render_code_block(code_ts: str, code_js: str, code_html: str = SanitizeDefaults.EMPTY) -> list[str]:
         if code_ts.strip():
             return [
                 f"{MarkdownText.CODE_FENCE_TS}{Newline.LF}",
                 code_ts,
+                f"{MarkdownText.CODE_FENCE_END}{Newline.LF}",
+            ]
+        if code_html.strip():
+            return [
+                f"{MarkdownText.CODE_FENCE_HTML}{Newline.LF}",
+                code_html,
                 f"{MarkdownText.CODE_FENCE_END}{Newline.LF}",
             ]
         return [
