@@ -5,9 +5,13 @@ from typing import Any, Optional
 from .constants import (
     ApiField,
     CollectionDefaults,
+    DefaultName,
     Defaults,
     Endpoint,
     JsonKey,
+    MarkdownText,
+    Newline,
+    SanitizeDefaults,
     TableInternal,
     Text,
 )
@@ -94,5 +98,28 @@ class TsdFetcher:
     def __init__(self, api: TabidooApi) -> None:
         self._api = api
 
-    def fetch(self, app_id: str) -> str:
+    def fetch(self, app_id: str, app_full: dict[str, Any]) -> str:
+        tables = app_full.get(JsonKey.TABLES)
+        if not isinstance(tables, list):
+            tables = list(CollectionDefaults.EMPTY)
+
+        parts: list[str] = list(CollectionDefaults.EMPTY)
+
+        for table in tables:
+            if not isinstance(table, dict):
+                continue
+            schema_id = str(table.get(JsonKey.ID, SanitizeDefaults.EMPTY)).strip()
+            if not schema_id:
+                continue
+            internal = (
+                str(table.get(JsonKey.INTERNAL_NAME_API, SanitizeDefaults.EMPTY)).strip()
+                or DefaultName.TABLE
+            )
+            content = self._api.get_typescript_definition(app_id=app_id, schema_id=schema_id)
+            parts.append(MarkdownText.TABLE_COMMENT.format(name=internal, schema_id=schema_id))
+            parts.append(content.rstrip())
+
+        if parts:
+            return Newline.DOUBLE.join(parts).rstrip() + Newline.LF
+
         return self._api.get_typescript_definition(app_id=app_id)

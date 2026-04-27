@@ -26,7 +26,7 @@ Default output (overridable via CLI flags):
 ### File contents
 
 - `<app-name>-schema.md`
-  - Full schema definition wrapped in a Markdown TypeScript block
+  - Per-table schema definitions wrapped in a Markdown TypeScript block
 - `<app-name>-tables.md`
   - Markdown overview grouped by modules with table metadata and field navigation
 - `<app-name>-scripts.md`
@@ -103,7 +103,7 @@ The CLI talks directly to Tabidoo API endpoints:
 - `GET /v2/users/me` (token validation)
 - `GET /v2/apps`
 - `GET /v2/apps/{appId}`
-- `POST /v2/apps/getApplicationTypeScriptDefinition` (for `schema.md`)
+- `POST /v2/apps/getApplicationTypeScriptDefinition` (for `schema.md`, called per table with `schemaId`)
 - `GET /v2/apps/{appId}/tables/customScripts/data` (optional)
 - `GET /v2/apps/{appId}/tables/wascenarios/data` (optional)
 

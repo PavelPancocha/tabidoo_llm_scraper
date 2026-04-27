@@ -81,7 +81,7 @@ class ExportRunner:
             progress.update(export_task, description=Text.FETCHING_TSD)
             schema_md: str | None = None
             try:
-                schema_md = tsd_fetcher.fetch(selected.app_id)
+                schema_md = tsd_fetcher.fetch(selected.app_id, app_full)
             except CliError as exc:
                 self._ui.warning(Text.SKIP_SCHEMA_ERROR.format(reason=str(exc)))
             progress.advance(export_task)

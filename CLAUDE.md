@@ -98,7 +98,7 @@ tabidoo_llm_export/
 2. **Load Apps** via `/v2/apps`
 3. **Select App** interactively or through `--app-id`
 4. **Load App Details** via `/v2/apps/{appId}`
-5. **Fetch Full Schema Definitions** via documented `/v2/apps/getApplicationTypeScriptDefinition` endpoint
+5. **Fetch Full Schema Definitions** per table via documented `/v2/apps/getApplicationTypeScriptDefinition` endpoint
 6. **Build Tables Overview** from official app metadata (`modules`, `tables`, `items`)
 7. **Fetch Workflows** from `wascenarios`
 8. **Fetch Custom Scripts** from `customScripts`
@@ -137,7 +137,8 @@ Schema fetcher for `/v2/apps/getApplicationTypeScriptDefinition`.
 
 **Features**:
 - Uses standard authenticated API requests
-- Fetches a consolidated schema definition payload for the app
+- Fetches schema definitions per table with `schemaId` and prefixes each block with the table internal name and ID
+- Falls back to an app-level schema request when no valid table IDs are available
 - Uses the same API token as other exporter calls
 
 ---
@@ -1080,16 +1081,16 @@ EOF
 
 ### Request Optimization
 
-**Schema Fetching**: The exporter requests a consolidated TypeScript definition via `/v2/apps/getApplicationTypeScriptDefinition`. This:
-- Uses one API request per app for schema export
-- Produces a compact schema payload without per-table duplication
-- Reduces request volume and rate-limit pressure on large apps
+**Schema Fetching**: The exporter requests TypeScript definitions per table via `/v2/apps/getApplicationTypeScriptDefinition` using `schemaId`. This:
+- Restores per-table interfaces in `schema.md`
+- Uses one schema request per table, with an app-level fallback only when no valid table IDs are available
+- May include repeated base interfaces in each table block, matching the historical full schema output
 
 **Trade-off**: A failed schema request skips `schema.md`, while `tables.md` and `scripts.md` are still produced
 
 **Tables Overview Rendering**:
 - `tables.md` is built from one app detail payload already loaded for extraction
-- No extra per-table schema requests are needed for the navigation document
+- Per-table schema requests are only used for `schema.md`, not for the navigation document
 
 ### Memory Usage
 
