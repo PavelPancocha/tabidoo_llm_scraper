@@ -178,6 +178,7 @@ class JsonKey(StrEnum):
     WRITTEN_HTML = "writtenHtml"
     RUNABLE_HTML = "runableHtml"
     SCRIPTS = "scripts"
+    JS_SCRIPTS = "jsScripts"
     FIELDS = "fields"
     DEFINITION = "definition"
     STEPS = "steps"
@@ -189,6 +190,9 @@ class JsonKey(StrEnum):
     INTERFACE = "interface"
     HEADER = "header"
     CONTENT = "content"
+    JSON_PART = "jsonPart"
+    FORM_LOGIC_DEFINITIONS = "formLogicDefinitions"
+    TITLE = "title"
 
 
 class OutputSuffix(StrEnum):

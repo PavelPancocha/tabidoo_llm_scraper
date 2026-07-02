@@ -11,6 +11,7 @@ from .constants import (
     JsonDefaults,
     JsonKey,
     SanitizeDefaults,
+    UiDefaults,
     WorkflowStepType,
 )
 from .models import (
@@ -94,29 +95,130 @@ class ScriptExtractor:
                         fragments.append(html_fragment)
 
             scripts = table.get(JsonKey.SCRIPTS)
+            emitted_table_script_names: set[str] = set()
             if isinstance(scripts, list):
                 for script in scripts:
                     if not isinstance(script, dict):
                         continue
-                    js = script.get(JsonKey.JS_SCRIPT)
-                    ts = script.get(JsonKey.TS_SCRIPT)
-                    if (
-                        isinstance(js, str)
-                        and js.strip()
-                    ) or (
-                        isinstance(ts, str)
-                        and ts.strip()
-                    ):
-                        fragments.append(
-                            ExtractedCodeFragment(
-                                table=table_name,
-                                field_name=str(script.get(JsonKey.NAME, DefaultName.TABLE_SCRIPT)),
-                                code_js=js if isinstance(js, str) else SanitizeDefaults.EMPTY,
-                                code_ts=ts if isinstance(ts, str) else SanitizeDefaults.EMPTY,
-                            )
-                        )
+                    fragment = self._fragment_from_table_script(table_name, script)
+                    if fragment:
+                        fragments.append(fragment)
+                        emitted_table_script_names.add(fragment.field_name)
+
+            json_part = self._parse_json_part(table.get(JsonKey.JSON_PART))
+            json_part_scripts = json_part.get(JsonKey.JS_SCRIPTS)
+            if isinstance(json_part_scripts, list):
+                for script in json_part_scripts:
+                    if not isinstance(script, dict):
+                        continue
+                    fragment = self._fragment_from_tabidoo_code_object(
+                        table_name,
+                        str(script.get(JsonKey.NAME, DefaultName.TABLE_SCRIPT)),
+                        script,
+                    )
+                    if fragment and fragment.field_name not in emitted_table_script_names:
+                        fragments.append(fragment)
+
+            form_logic_definitions = table.get(JsonKey.FORM_LOGIC_DEFINITIONS)
+            if not isinstance(form_logic_definitions, list):
+                form_logic_definitions = json_part.get(JsonKey.FORM_LOGIC_DEFINITIONS)
+            if isinstance(form_logic_definitions, list):
+                fragments.extend(self._extract_form_logic_definition_scripts(table_name, form_logic_definitions))
 
         return ExtractedCode(app_id=app_id, app_name=app_name, fragments=fragments)
+
+    def _fragment_from_table_script(
+        self,
+        table_name: str,
+        script: dict[str, Any],
+    ) -> Optional[ExtractedCodeFragment]:
+        return self._fragment_from_script_pair(
+            table_name,
+            str(script.get(JsonKey.NAME, DefaultName.TABLE_SCRIPT)),
+            script.get(JsonKey.JS_SCRIPT),
+            script.get(JsonKey.TS_SCRIPT),
+        )
+
+    def _parse_json_part(self, value: Any) -> dict[str, Any]:
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str) and value.strip():
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+            if isinstance(parsed, dict):
+                return parsed
+        return {}
+
+    def _extract_form_logic_definition_scripts(
+        self,
+        table_name: str,
+        definitions: list[Any],
+    ) -> list[ExtractedCodeFragment]:
+        fragments: list[ExtractedCodeFragment] = list(CollectionDefaults.EMPTY)
+        for definition in definitions:
+            if not isinstance(definition, dict):
+                continue
+            event_type = str(definition.get(JsonKey.TYPE, SanitizeDefaults.EMPTY)) or "formLogic"
+            items = definition.get(JsonKey.ITEMS)
+            if not isinstance(items, list):
+                continue
+            for index, item in enumerate(items, start=UiDefaults.INDEX_START):
+                if not isinstance(item, dict):
+                    continue
+                script = item.get(JsonKey.SCRIPT) if isinstance(item.get(JsonKey.SCRIPT), dict) else {}
+                title = str(item.get(JsonKey.TITLE, SanitizeDefaults.EMPTY)).strip()
+                script_name = str(script.get(JsonKey.NAME, DefaultName.TABLE_SCRIPT)).strip()
+                label_parts = [
+                    "formLogicDefinitions",
+                    event_type,
+                    title or f"step {index}",
+                    script_name or DefaultName.TABLE_SCRIPT,
+                ]
+                fragment = self._fragment_from_tabidoo_code_object(
+                    table_name,
+                    " / ".join(label_parts),
+                    script,
+                )
+                if fragment:
+                    fragments.append(fragment)
+        return fragments
+
+    def _fragment_from_tabidoo_code_object(
+        self,
+        table_name: str,
+        field_name: str,
+        script: dict[str, Any],
+    ) -> Optional[ExtractedCodeFragment]:
+        return self._fragment_from_script_pair(
+            table_name,
+            field_name,
+            script.get(JsonKey.RUNABLE_SCRIPT),
+            script.get(JsonKey.WRITTEN_TYPESCRIPT),
+        )
+
+    def _fragment_from_script_pair(
+        self,
+        table_name: str,
+        field_name: str,
+        js: Any,
+        ts: Any,
+    ) -> Optional[ExtractedCodeFragment]:
+        if (
+            isinstance(js, str)
+            and js.strip()
+        ) or (
+            isinstance(ts, str)
+            and ts.strip()
+        ):
+            return ExtractedCodeFragment(
+                table=table_name,
+                field_name=field_name,
+                code_js=js if isinstance(js, str) else SanitizeDefaults.EMPTY,
+                code_ts=ts if isinstance(ts, str) else SanitizeDefaults.EMPTY,
+            )
+        return None
 
     def _fragment_from_meta(
         self, table: str, field_name: str, meta: dict[str, Any]

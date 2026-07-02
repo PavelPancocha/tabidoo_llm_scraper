@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 
 from tabidoo_llm_export.extractor import ScriptExtractor
@@ -140,6 +141,154 @@ class ScriptExtractorFieldScriptTests(unittest.TestCase):
         extracted = ScriptExtractor().extract(app_structure)
 
         self.assertEqual(extracted.fragments, [])
+
+    def test_extracts_legacy_table_scripts_without_form_logic_definitions(self) -> None:
+        app_structure = {
+            "id": "app-1",
+            "name": "Example",
+            "internalName": "example",
+            "tables": [
+                {
+                    "id": "table-1",
+                    "internalNameApi": "legacyTable",
+                    "items": [],
+                    "scripts": [
+                        {
+                            "name": "onModelLoad",
+                            "jsScript": "legacy load js",
+                            "tsScript": "legacy load ts",
+                        }
+                    ],
+                }
+            ],
+        }
+
+        fragments = ScriptExtractor().extract(app_structure).fragments
+
+        self.assertEqual(len(fragments), 1)
+        self.assertEqual(fragments[0].field_name, "onModelLoad")
+        self.assertEqual(fragments[0].code_js, "legacy load js")
+        self.assertEqual(fragments[0].code_ts, "legacy load ts")
+
+    def test_extracts_json_part_form_logic_steps_without_duplicating_compat_scripts(self) -> None:
+        app_structure = {
+            "id": "app-1",
+            "name": "Example",
+            "internalName": "example",
+            "tables": [
+                {
+                    "id": "table-1",
+                    "internalNameApi": "developmentIdeas",
+                    "items": [],
+                    "scripts": [
+                        {
+                            "name": "onModelChange",
+                            "jsScript": "compat js",
+                            "tsScript": "compat ts",
+                        }
+                    ],
+                    "jsonPart": json.dumps(
+                        {
+                            "jsScripts": [
+                                {
+                                    "name": "onModelChange",
+                                    "runableSript": "jsonpart duplicate js",
+                                    "writtenTypeScript": "jsonpart duplicate ts",
+                                },
+                                {
+                                    "name": "beforeModelSave",
+                                    "runableSript": "before save js",
+                                    "writtenTypeScript": "before save ts",
+                                },
+                            ],
+                            "formLogicDefinitions": [
+                                {
+                                    "type": "onChangeForm",
+                                    "items": [
+                                        {
+                                            "clientId": "xh0qzf39qc",
+                                            "title": "Step 2",
+                                            "script": {
+                                                "name": "onModelChange",
+                                                "runableSript": "old step js",
+                                                "writtenTypeScript": "old step ts",
+                                            },
+                                        },
+                                        {
+                                            "clientId": "x2z8p789yb",
+                                            "title": "Demo: step 2",
+                                            "script": {
+                                                "name": "script",
+                                                "runableSript": "// demo step 2",
+                                                "writtenTypeScript": (
+                                                    "(async (doo: IDoo) => {\n"
+                                                    "    // demo step 2\n"
+                                                    "})"
+                                                ),
+                                            },
+                                        },
+                                    ],
+                                }
+                            ],
+                        }
+                    ),
+                }
+            ],
+        }
+
+        fragments = ScriptExtractor().extract(app_structure).fragments
+        by_name = {fragment.field_name: fragment for fragment in fragments}
+
+        self.assertEqual([fragment.field_name for fragment in fragments].count("onModelChange"), 1)
+        self.assertEqual(by_name["onModelChange"].code_ts, "compat ts")
+        self.assertEqual(by_name["beforeModelSave"].code_ts, "before save ts")
+        self.assertEqual(
+            by_name["formLogicDefinitions / onChangeForm / Step 2 / onModelChange"].code_ts,
+            "old step ts",
+        )
+        demo_step = by_name["formLogicDefinitions / onChangeForm / Demo: step 2 / script"]
+        self.assertIn("demo step 2", demo_step.code_ts)
+        self.assertIn("demo step 2", demo_step.code_js)
+
+    def test_extracts_top_level_form_logic_definitions_from_public_app_payload(self) -> None:
+        app_structure = {
+            "id": "app-1",
+            "name": "Example",
+            "internalName": "example",
+            "tables": [
+                {
+                    "id": "table-1",
+                    "internalNameApi": "developmentIdeas",
+                    "items": [],
+                    "scripts": [],
+                    "formLogicDefinitions": [
+                        {
+                            "type": "onChangeForm",
+                            "items": [
+                                {
+                                    "clientId": "x2z8p789yb",
+                                    "title": "Demo: step 2",
+                                    "script": {
+                                        "name": "script",
+                                        "runableSript": "// demo step 2",
+                                        "writtenTypeScript": "// demo step 2",
+                                    },
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        fragments = ScriptExtractor().extract(app_structure).fragments
+
+        self.assertEqual(len(fragments), 1)
+        self.assertEqual(
+            fragments[0].field_name,
+            "formLogicDefinitions / onChangeForm / Demo: step 2 / script",
+        )
+        self.assertIn("demo step 2", fragments[0].code_ts)
 
 
 if __name__ == "__main__":
