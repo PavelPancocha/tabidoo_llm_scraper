@@ -32,6 +32,14 @@ Default output (overridable via CLI flags):
 - `<app-name>-scripts.md`
   - Markdown bundle of app scripts prepared for LLM input, including table scripts, field formulas, button scripts, free HTML field code, workflows, and custom scripts
 
+## Large exports
+
+Schema definitions use at most two concurrent requests. Completed definitions are written to numbered files in a private temporary directory, then assembled in table order. The runner passes a file path to the Markdown writer and statistics builder; both process bounded chunks instead of loading the assembled schema into memory. Filenames, Markdown contents and partial-export behavior remain unchanged.
+
+Allow temporary disk space of roughly twice the schema size. Python removes the scratch directories on success or handled failure. `TMPDIR` can select a disk-backed location when the system temporary directory uses RAM. Each HTTP JSON response, app metadata and scripts still fit in memory; the schema spool removes the accumulated cross-table copies.
+
+Run the regression checks with `python -m unittest discover -s tests -v`. They cover request bounds/order, failures and scratch cleanup, Unicode, CRLF/chunk boundaries, exact Markdown and schema statistics. A synthetic 100-table, 52.2 MB comparison produced identical three output hashes and statistics: peak RSS 648,468 → 39,136 KiB; local processing took 1.064 → 1.434 s. This measures the schema pipeline, not API latency or arbitrary application sizes.
+
 ## Requirements
 
 - Python 3.11+ (3.10 should work if typing stays minimal)

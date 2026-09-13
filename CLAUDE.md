@@ -135,8 +135,10 @@ Core API client wrapping documented HTTP requests.
 #### `TsdFetcher`
 Schema fetcher for `/v2/apps/getApplicationTypeScriptDefinition`.
 
+`fetch(app_id, app_full, destination: Path)` writes unwrapped UTF-8 schema to the supplied path. The runner owns its private temporary directory; completed per-table spools are automatically removed.
+
 **Features**:
-- Uses standard authenticated API requests
+- Uses standard authenticated API requests, at most two in flight; refill either completed slot and preserve table order on disk
 - Fetches schema definitions per table with `schemaId` and prefixes each block with the table internal name and ID
 - Falls back to an app-level schema request when no valid table IDs are available
 - Uses the same API token as other exporter calls
@@ -418,7 +420,7 @@ Sanitizes app names for filenames:
    - `{sanitized_name}-schema.md`
    - `{sanitized_name}-tables.md`
    - `{sanitized_name}-scripts.md`
-4. Wrap full schema definition into a Markdown TypeScript block
+4. Read `schema_md: Path | None` in bounded chunks, preserving Unicode trailing-whitespace trimming, and wrap it in a Markdown TypeScript block
 5. If schema export is skipped, remove any stale old schema file
 6. Write files with UTF-8 encoding
 
@@ -444,8 +446,8 @@ Sanitizes app names for filenames:
 - **Code blocks** - Number of extracted code fragments
 - **Workflow scripts** - Number of workflow code fragments
 - **Custom scripts** - Number of custom script fragments
-- **Schema lines** - Line count in `schema.md`
-- **Schema bytes** - Byte size of `schema.md`
+- **Schema lines** - Unwrapped schema line count, streamed from `schema_md: Path | None` with Python `splitlines()` semantics
+- **Schema bytes** - Unwrapped UTF-8 schema size from the file
 - **Tables MD lines** - Line count in `tables.md`
 - **Tables MD bytes** - Byte size of `tables.md`
 - **LLM lines** - Line count in formatted output
@@ -1094,9 +1096,9 @@ EOF
 
 ### Memory Usage
 
-**JSON Parsing**: All API responses are loaded into memory. For large apps (1000+ fields), this can use 100-500 MB of RAM.
+**Schema pipeline**: Keep only up to two individual TSD responses plus spool paths/order in memory. `api.py` spools completed definitions and assembles the raw schema on disk; `runner.py` owns its temporary lifetime; `output.py` and `stats.py` read 65,536-character chunks. Do not reintroduce whole-schema joins, `read_text()`, `splitlines()` lists or UTF-8 copies in this path.
 
-**Mitigation**: Python's garbage collection handles cleanup after each processing step.
+**Remaining bound**: Each HTTP JSON response, app metadata, workflows and script formatting still use memory. Temporary schema space is roughly twice the unwrapped schema size; use a disk-backed `TMPDIR` on hosts whose default temp directory is in RAM. Preserve exact Markdown order, Unicode/CRLF/trailing whitespace, statistics, fallback and partial-export cleanup when changing this pipeline.
 
 ### Output File Size
 

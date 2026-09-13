@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .constants import Encoding, Format, OutputSuffix, Separator
+from .constants import Encoding, Format, MarkdownText, Newline, OutputSuffix, Separator
 from .env import Sanitizer
-from .formatters import MarkdownRenderer
 from .models import AppSummary
 
 
@@ -13,7 +12,7 @@ class OutputWriter:
         self,
         out_dir: Path,
         app: AppSummary,
-        schema_md: str | None,
+        schema_md: Path | None,
         tables_md: str,
         llm_md: str,
     ) -> tuple[Path | None, Path, Path]:
@@ -38,7 +37,18 @@ class OutputWriter:
         tables_path = out_dir / tables_name
         scripts_path = out_dir / scripts_name
         if schema_md is not None:
-            schema_path.write_text(MarkdownRenderer.wrap_typescript(schema_md), encoding=Encoding.UTF8)
+            with schema_path.open("wb") as output, schema_md.open("r", encoding=Encoding.UTF8, newline="") as source:
+                output.write(f"{MarkdownText.TITLE_TSD}{Newline.DOUBLE}{MarkdownText.CODE_FENCE_TS}{Newline.LF}".encode(Encoding.UTF8))
+                last_content_end = output.tell()
+                for chunk in iter(lambda: source.read(65_536), ""):
+                    offset = output.tell()
+                    output.write(chunk.encode(Encoding.UTF8))
+                    trimmed = chunk.rstrip()
+                    if trimmed:
+                        last_content_end = offset + len(trimmed.encode(Encoding.UTF8))
+                output.seek(last_content_end)
+                output.truncate()
+                output.write(f"{Newline.LF}{MarkdownText.CODE_FENCE_END}{Newline.LF}".encode(Encoding.UTF8))
         else:
             if schema_path.exists():
                 schema_path.unlink()

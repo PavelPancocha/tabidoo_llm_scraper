@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Optional
 
 from .api import TabidooApi, TsdFetcher
@@ -75,14 +76,15 @@ class ExportRunner:
         with self._ui.spinner(Text.LOADING_APP) as status:
             app_full = api.get_app_full(selected.app_id)
 
-        with self._ui.progress() as progress:
+        with TemporaryDirectory(prefix="tabidoo-schema-") as temporary_dir, self._ui.progress() as progress:
             export_task = progress.add_task(Text.EXPORTING, total=len(ProgressStep))
 
             progress.update(export_task, description=Text.FETCHING_TSD)
-            schema_md: str | None = None
+            schema_md: Path | None = Path(temporary_dir) / "schema.ts"
             try:
-                schema_md = tsd_fetcher.fetch(selected.app_id, app_full)
+                tsd_fetcher.fetch(selected.app_id, app_full, schema_md)
             except CliError as exc:
+                schema_md = None
                 self._ui.warning(Text.SKIP_SCHEMA_ERROR.format(reason=str(exc)))
             progress.advance(export_task)
 
@@ -123,15 +125,15 @@ class ExportRunner:
             )
             progress.advance(export_task)
 
-        stats = StatsBuilder.build(
-            app_full,
-            extracted,
-            workflows,
-            custom_scripts,
-            schema_md or "",
-            tables_md,
-            llm_md,
-        )
+            stats = StatsBuilder.build(
+                app_full,
+                extracted,
+                workflows,
+                custom_scripts,
+                schema_md,
+                tables_md,
+                llm_md,
+            )
         self._ui.show_stats(stats)
         self._ui.success(Text.DONE)
         self._ui.info(Text.WROTE)

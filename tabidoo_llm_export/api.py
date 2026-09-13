@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from pathlib import Path
+from shutil import copyfileobj
+from tempfile import TemporaryDirectory
 from typing import Any, Optional
 
 from .constants import (
     ApiField,
     CollectionDefaults,
     DefaultName,
+    Encoding,
     Defaults,
     Endpoint,
     JsonKey,
@@ -98,28 +103,58 @@ class TsdFetcher:
     def __init__(self, api: TabidooApi) -> None:
         self._api = api
 
-    def fetch(self, app_id: str, app_full: dict[str, Any]) -> str:
+    def fetch(self, app_id: str, app_full: dict[str, Any], destination: Path) -> None:
         tables = app_full.get(JsonKey.TABLES)
         if not isinstance(tables, list):
             tables = list(CollectionDefaults.EMPTY)
 
-        parts: list[str] = list(CollectionDefaults.EMPTY)
+        parts: list[tuple[str, Path]] = []
 
-        for table in tables:
-            if not isinstance(table, dict):
-                continue
-            schema_id = str(table.get(JsonKey.ID, SanitizeDefaults.EMPTY)).strip()
-            if not schema_id:
-                continue
-            internal = (
-                str(table.get(JsonKey.INTERNAL_NAME_API, SanitizeDefaults.EMPTY)).strip()
-                or DefaultName.TABLE
-            )
-            content = self._api.get_typescript_definition(app_id=app_id, schema_id=schema_id)
-            parts.append(MarkdownText.TABLE_COMMENT.format(name=internal, schema_id=schema_id))
-            parts.append(content.rstrip())
+        with TemporaryDirectory(prefix="tsd-parts-", dir=destination.parent) as temporary_dir, ThreadPoolExecutor(max_workers=2) as executor:
+            remaining = iter(tables)
+            pending: dict[Future[str], int] = {}
+            while True:
+                while len(pending) < 2:
+                    for table in remaining:
+                        if not isinstance(table, dict):
+                            continue
+                        schema_id = str(table.get(JsonKey.ID, SanitizeDefaults.EMPTY)).strip()
+                        if not schema_id:
+                            continue
+                        internal = (
+                            str(table.get(JsonKey.INTERNAL_NAME_API, SanitizeDefaults.EMPTY)).strip()
+                            or DefaultName.TABLE
+                        )
+                        parts.append((MarkdownText.TABLE_COMMENT.format(name=internal, schema_id=schema_id), Path(temporary_dir) / str(len(parts))))
+                        pending[executor.submit(
+                            self._api.get_typescript_definition, app_id=app_id, schema_id=schema_id
+                        )] = len(parts) - 1
+                        break
+                    else:
+                        break
+                if not pending:
+                    break
+                completed, unfinished = wait(pending, return_when=FIRST_COMPLETED)
+                for future in sorted(completed, key=pending.__getitem__):
+                    parts[pending.pop(future)][1].write_bytes(future.result().rstrip().encode(Encoding.UTF8))
+                # Release completed futures before refilling either slot; output stays in input order.
+                del completed, unfinished, future
 
-        if parts:
-            return Newline.DOUBLE.join(parts).rstrip() + Newline.LF
+            if parts:
+                with destination.open("wb") as output:
+                    for index, (comment, part) in enumerate(parts):
+                        if index:
+                            output.write(Newline.DOUBLE.encode(Encoding.UTF8))
+                        output.write(comment.encode(Encoding.UTF8))
+                        last_content_end = output.tell()
+                        output.write(Newline.DOUBLE.encode(Encoding.UTF8))
+                        with part.open("rb") as source:
+                            copyfileobj(source, output, length=65_536)
+                        if part.stat().st_size:
+                            last_content_end = output.tell()
+                    output.seek(last_content_end)
+                    output.truncate()
+                    output.write(Newline.LF.encode(Encoding.UTF8))
+                return
 
-        return self._api.get_typescript_definition(app_id=app_id)
+        destination.write_bytes(self._api.get_typescript_definition(app_id=app_id).encode(Encoding.UTF8))
