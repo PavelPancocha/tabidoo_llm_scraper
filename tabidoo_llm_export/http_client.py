@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import textwrap
+import time
 from typing import Any, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -118,23 +119,28 @@ class HttpClient:
             self._console.print(f"{method} {url}", style=Style.INFO)
 
         request = Request(url=url, method=method, headers=headers, data=data)
-        try:
-            with urlopen(request, timeout=self._timeout_sec) as resp:
-                body = resp.read()
-                return HttpResponse(
-                    status=getattr(resp, Attr.STATUS, int(ExitCode.SUCCESS)),
-                    headers={k.lower(): v for k, v in resp.headers.items()},
-                    body=body,
-                )
-        except HTTPError as exc:
-            body = exc.read() if exc.fp else BytesDefaults.EMPTY
-            status = exc.code
-            message = HttpErrorFormatter.format(status, url, body)
-            if status in (HttpStatus.UNAUTHORIZED, HttpStatus.FORBIDDEN):
-                raise AuthError(message) from exc
-            raise HttpStatusError(status, message) from exc
-        except URLError as exc:
-            raise NetworkError(Text.NETWORK_ERROR.format(url=url, detail=exc)) from exc
+        for attempt in range(3):
+            try:
+                with urlopen(request, timeout=self._timeout_sec) as resp:
+                    body = resp.read()
+                    return HttpResponse(
+                        status=getattr(resp, Attr.STATUS, int(ExitCode.SUCCESS)),
+                        headers={k.lower(): v for k, v in resp.headers.items()},
+                        body=body,
+                    )
+            except HTTPError as exc:
+                body = exc.read() if exc.fp else BytesDefaults.EMPTY
+                status = exc.code
+                message = HttpErrorFormatter.format(status, url, body)
+                if status in (HttpStatus.UNAUTHORIZED, HttpStatus.FORBIDDEN):
+                    raise AuthError(message) from exc
+                raise HttpStatusError(status, message) from exc
+            except URLError as exc:
+                if attempt == 2:
+                    raise NetworkError(Text.NETWORK_ERROR.format(url=url, detail=exc)) from exc
+                time.sleep(0.5 * (attempt + 1))
+
+        raise AssertionError("unreachable")
 
     def get_json(self, path: str, headers: Optional[dict[str, str]] = None) -> Any:
         resp = self.request(HttpMethod.GET, path, None, headers)
