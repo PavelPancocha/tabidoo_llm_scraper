@@ -138,7 +138,7 @@ Schema fetcher for `/v2/apps/getApplicationTypeScriptDefinition`.
 `fetch(app_id, app_full, destination: Path)` writes unwrapped UTF-8 schema to the supplied path. The runner owns its private temporary directory; completed per-table spools are automatically removed.
 
 **Features**:
-- Uses standard authenticated API requests, at most two in flight; refill either completed slot and preserve table order on disk
+- Uses standard authenticated API requests, `max_in_flight` in flight (class default 2; real exports use 6, override `TABIDOO_EXPORT_TSD_CONCURRENCY` 1-10); refill any completed slot and preserve table order on disk
 - Fetches schema definitions per table with `schemaId` and prefixes each block with the table internal name and ID
 - Falls back to an app-level schema request when no valid table IDs are available
 - Uses the same API token as other exporter calls
@@ -1096,7 +1096,7 @@ EOF
 
 ### Memory Usage
 
-**Schema pipeline**: Keep only up to two individual TSD responses plus spool paths/order in memory. `api.py` spools completed definitions and assembles the raw schema on disk; `runner.py` owns its temporary lifetime; `output.py` and `stats.py` read 65,536-character chunks. Do not reintroduce whole-schema joins, `read_text()`, `splitlines()` lists or UTF-8 copies in this path.
+**Schema pipeline**: Keep only up to `max_in_flight` (6 in real exports) individual TSD responses plus spool paths/order in memory. `api.py` spools completed definitions and assembles the raw schema on disk; `runner.py` owns its temporary lifetime; `output.py` and `stats.py` read 65,536-character chunks. Do not reintroduce whole-schema joins, `read_text()`, `splitlines()` lists or UTF-8 copies in this path.
 
 **Remaining bound**: Each HTTP JSON response, app metadata, workflows and script formatting still use memory. Temporary schema space is roughly twice the unwrapped schema size; use a disk-backed `TMPDIR` on hosts whose default temp directory is in RAM. Preserve exact Markdown order, Unicode/CRLF/trailing whitespace, statistics, fallback and partial-export cleanup when changing this pipeline.
 

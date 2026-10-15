@@ -100,8 +100,11 @@ class TabidooApi:
 
 
 class TsdFetcher:
-    def __init__(self, api: TabidooApi) -> None:
+    def __init__(self, api: TabidooApi, max_in_flight: int = 2) -> None:
+        if not 1 <= max_in_flight <= 10:
+            raise ValueError("max_in_flight must be between 1 and 10")
         self._api = api
+        self._max_in_flight = max_in_flight
 
     def fetch(self, app_id: str, app_full: dict[str, Any], destination: Path) -> None:
         tables = app_full.get(JsonKey.TABLES)
@@ -110,11 +113,11 @@ class TsdFetcher:
 
         parts: list[tuple[str, Path]] = []
 
-        with TemporaryDirectory(prefix="tsd-parts-", dir=destination.parent) as temporary_dir, ThreadPoolExecutor(max_workers=2) as executor:
+        with TemporaryDirectory(prefix="tsd-parts-", dir=destination.parent) as temporary_dir, ThreadPoolExecutor(max_workers=self._max_in_flight) as executor:
             remaining = iter(tables)
             pending: dict[Future[str], int] = {}
             while True:
-                while len(pending) < 2:
+                while len(pending) < self._max_in_flight:
                     for table in remaining:
                         if not isinstance(table, dict):
                             continue

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import unittest
 from concurrent.futures import Future, wait
 from collections.abc import Iterable
@@ -184,3 +185,20 @@ class TsdFetcherTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TsdConcurrencyTests(unittest.TestCase):
+    def test_runner_concurrency_default_override_and_bounds(self) -> None:
+        from tabidoo_llm_export.errors import InvalidConfigError
+        from tabidoo_llm_export.runner import tsd_max_in_flight
+
+        with patch.dict("os.environ", {}, clear=False):
+            os.environ.pop("TABIDOO_EXPORT_TSD_CONCURRENCY", None)
+            self.assertEqual(tsd_max_in_flight(), 6)
+        with patch.dict("os.environ", {"TABIDOO_EXPORT_TSD_CONCURRENCY": "2"}):
+            self.assertEqual(tsd_max_in_flight(), 2)
+        for bad in ("0", "11", "x", "-1"):
+            with patch.dict("os.environ", {"TABIDOO_EXPORT_TSD_CONCURRENCY": bad}), self.assertRaises(InvalidConfigError):
+                tsd_max_in_flight()
+        with self.assertRaises(ValueError):
+            TsdFetcher(object(), 0)  # type: ignore[arg-type]

@@ -25,10 +25,14 @@ class Defaults:
     TIMEOUT_SEC = 30
     ACCEPT_LANGUAGE_QUALITY = "0.6"
     TABLE_DATA_PAGE_LIMIT = 1000
+    # Per-table schema requests in flight during a real export (measured on RPA DEV, 224 tables:
+    # 2 -> 149 s, 6 -> 84 s, 10 -> 76 s, byte-identical output). Override with TABIDOO_EXPORT_TSD_CONCURRENCY.
+    TSD_MAX_IN_FLIGHT = 6
 
 
 class EnvVar(StrEnum):
     API_TOKEN = "TABIDOO_API_TOKEN"
+    TSD_CONCURRENCY = "TABIDOO_EXPORT_TSD_CONCURRENCY"
 
 
 class Encoding(StrEnum):

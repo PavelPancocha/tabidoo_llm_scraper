@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
@@ -7,13 +8,15 @@ from typing import Optional
 from .api import TabidooApi, TsdFetcher
 from .constants import (
     CollectionDefaults,
+    Defaults,
+    EnvVar,
     JsonKey,
     Prefix,
     ProgressStep,
     TableInternal,
     Text,
 )
-from .errors import ApiError, CliError, UserInputError
+from .errors import ApiError, CliError, InvalidConfigError, UserInputError
 from .extractor import ScriptExtractor
 from .formatters import LlmFormatter, TablesFormatter
 from .http_client import HttpClient
@@ -54,7 +57,7 @@ class ExportRunner:
         formatter = LlmFormatter()
         tables_formatter = TablesFormatter()
         writer = OutputWriter()
-        tsd_fetcher = TsdFetcher(api)
+        tsd_fetcher = TsdFetcher(api, tsd_max_in_flight())
 
         with self._ui.spinner(Text.AUTHENTICATING) as status:
             user = api.get_user()
@@ -142,3 +145,12 @@ class ExportRunner:
         self._ui.info(f"{Prefix.BULLET}{tables_path}")
         self._ui.info(f"{Prefix.BULLET}{scripts_path}")
         return schema_path, tables_path, scripts_path
+
+
+def tsd_max_in_flight() -> int:
+    raw = os.environ.get(EnvVar.TSD_CONCURRENCY, "").strip()
+    if not raw:
+        return Defaults.TSD_MAX_IN_FLIGHT
+    if not raw.isdigit() or not 1 <= int(raw) <= 10:
+        raise InvalidConfigError(f"{EnvVar.TSD_CONCURRENCY} must be an integer between 1 and 10")
+    return int(raw)
