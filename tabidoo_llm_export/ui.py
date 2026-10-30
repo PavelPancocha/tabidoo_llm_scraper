@@ -67,6 +67,7 @@ class Ui:
         table.add_row(StatsLabel.CODE_BLOCKS, str(stats.code_blocks))
         table.add_row(StatsLabel.WORKFLOWS, str(stats.workflows))
         table.add_row(StatsLabel.CUSTOM_SCRIPTS, str(stats.custom_scripts))
+        table.add_row(StatsLabel.WIDGETS, str(stats.widgets))
         table.add_row(StatsLabel.SCHEMA_LINES, str(stats.schema_lines))
         table.add_row(StatsLabel.SCHEMA_BYTES, str(stats.schema_bytes))
         table.add_row(StatsLabel.TABLES_MD_LINES, str(stats.tables_md_lines))

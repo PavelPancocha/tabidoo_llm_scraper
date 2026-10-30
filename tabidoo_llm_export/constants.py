@@ -78,6 +78,7 @@ class Char(StrEnum):
 class Separator(StrEnum):
     ERROR_JOIN = "; "
     FILE = "-"
+    LANGUAGE_VARIANTS = " / "
 
 
 class DecodeDefaults(StrEnum):
@@ -143,6 +144,9 @@ class Endpoint(StrEnum):
 class TableInternal(StrEnum):
     WORKFLOWS = "wascenarios"
     CUSTOM_SCRIPTS = "customScripts"
+    # The system widgets table has no internal API name (`.../tables/widgets/data` returns 400); it is addressed by
+    # its global system schema ID. Verified on apps.trixit.cz for two apps (DEV and STAGE) on 2026-10-30.
+    WIDGETS = "b7e89080-6bb2-4870-9e0f-7d7d491d9c7e"
 
 
 class FieldType(StrEnum):
@@ -156,6 +160,10 @@ class FieldType(StrEnum):
 
 class WorkflowStepType(StrEnum):
     JS_SCRIPT = "jsScript"
+
+
+class WidgetType(StrEnum):
+    TEXT = "widgetNameText"
 
 
 class JsonKey(StrEnum):
@@ -197,6 +205,12 @@ class JsonKey(StrEnum):
     JSON_PART = "jsonPart"
     FORM_LOGIC_DEFINITIONS = "formLogicDefinitions"
     TITLE = "title"
+    VER = "ver"
+    DEFINITIONS = "definitions"
+    ID_WIDGET_TYPE = "idWidgetType"
+    SETTINGS = "settings"
+    TEXT_I18N = "textI18n"
+    HEADERS_I18N = "headersI18n"
 
 
 class OutputSuffix(StrEnum):
@@ -215,9 +229,15 @@ class MarkdownText(StrEnum):
     TITLE_ANALYSIS = "# Application Code Analysis"
     TITLE_WORKFLOW = "## Workflow Code"
     TITLE_CUSTOM = "## Custom Scripts"
+    TITLE_WIDGETS = "## Widgets"
     BLOCK_PREFIX = "## Code Block {index}"
     WORKFLOW_PREFIX = "### Workflow {index}: {name}"
     CUSTOM_PREFIX = "### Custom Script {index}: {name}"
+    WIDGET_PREFIX = "### Widget {index}: {widget_id}"
+    WIDGET_TYPE_LABEL = "**Type:** {value}"
+    WIDGET_VERSION_LABEL = "**Version:** {value}"
+    WIDGET_HEADER_LABEL = "**Header:** {value}"
+    WIDGET_LANGUAGE_COMMENT = "<!-- {language} -->"
     MODULE_PREFIX = "## Module: {name}"
     UNGROUPED_TABLES = "## Ungrouped Tables"
     TABLE_PREFIX = "### Table: {name}"
@@ -289,6 +309,7 @@ class ProgressStep(IntEnum):
     TABLES = auto()
     WORKFLOWS = auto()
     CUSTOM = auto()
+    WIDGETS = auto()
     EXTRACT = auto()
     WRITE = auto()
 
@@ -331,6 +352,7 @@ class Text(StrEnum):
     BUILDING_TABLES = "🗂️ Building tables overview"
     FETCHING_WORKFLOWS = "⚙️ Fetching workflows"
     FETCHING_CUSTOM = "🧩 Fetching custom scripts"
+    FETCHING_WIDGETS = "🪟 Fetching widgets"
     EXTRACTING = "🧪 Extracting scripts"
     WRITING = "💾 Writing output files"
     DONE = "✅ Export complete"
@@ -372,6 +394,7 @@ class StatsLabel(StrEnum):
     CODE_BLOCKS = "Code blocks"
     WORKFLOWS = "Workflow scripts"
     CUSTOM_SCRIPTS = "Custom scripts"
+    WIDGETS = "Widgets"
     SCHEMA_LINES = "Schema lines"
     SCHEMA_BYTES = "Schema bytes"
     TABLES_MD_LINES = "Tables MD lines"

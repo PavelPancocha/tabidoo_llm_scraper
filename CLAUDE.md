@@ -9,7 +9,7 @@
 The tool bridges Tabidoo's low-code platform with AI-assisted development by:
 - Exporting the full schema definition into `*-schema.md` via documented API v2 endpoint
 - Exporting an official API-based tables overview into `*-tables.md`
-- Collecting custom scripts, workflows, and field-level code into `*-scripts.md`
+- Collecting custom scripts, workflows, field-level code, and dashboard widget markup/code into `*-scripts.md`
 - Producing deterministic, reviewable Markdown outputs with a simple CLI UX
 
 ### Key Capabilities
@@ -102,8 +102,9 @@ tabidoo_llm_export/
 6. **Build Tables Overview** from official app metadata (`modules`, `tables`, `items`)
 7. **Fetch Workflows** from `wascenarios`
 8. **Fetch Custom Scripts** from `customScripts`
-9. **Extract Code** from tables, fields, workflows, and custom scripts
-10. **Write Files** to `{app-name}-schema.md` (optional), `{app-name}-tables.md`, `{app-name}-scripts.md`
+9. **Fetch Widgets** from the system widgets table (schema ID `b7e89080-6bb2-4870-9e0f-7d7d491d9c7e`)
+10. **Extract Code** from tables, fields, workflows, custom scripts, and widgets
+11. **Write Files** to `{app-name}-schema.md` (optional), `{app-name}-tables.md`, `{app-name}-scripts.md`
 
 **Partial Export Behavior**:
 - If schema endpoint fails, the run continues.
@@ -124,7 +125,7 @@ Core API client wrapping documented HTTP requests.
 - `get_user()` - Validate token and get user info
 - `list_apps()` - List accessible applications
 - `get_app_full(app_id)` - Get complete app structure including `modules`, `tables`, `items`, and table scripts
-- `get_table_data(app_id, table_internal)` - Get paginated data from system tables (`wascenarios`, `customScripts`)
+- `get_table_data(app_id, table_internal)` - Get paginated data from system tables (`wascenarios`, `customScripts`, widgets by system schema ID)
 - `get_typescript_definition(app_id, schema_id)` - Full schema definition fetch via API v2 endpoint
 
 **Key Features**:
@@ -153,6 +154,7 @@ Schema fetcher for `/v2/apps/getApplicationTypeScriptDefinition`.
 - Extract field and table scripts from app structure
 - Extract workflow scripts from `wascenarios`
 - Extract custom scripts from `customScripts`
+- Extract dashboard widgets (`extract_widgets`): free HTML markup (`writtenHtml`, fallback `runableHtml`), init script (`writtenTypeScript`, fallback `runableSript`), text widgets' `textI18n` HTML; widgets without markup or code are skipped; output sorted by widget ID
 
 **Important Behavior**:
 - Supports both JS-only and TS-only field/table scripts
@@ -175,6 +177,7 @@ Formats extracted code into the final `*-scripts.md` bundle.
 - Falls back to JavaScript when TypeScript is absent
 - Renders free HTML field content as HTML
 - Includes custom script definitions (`dts`) and runnable script blocks
+- Ends with a `## Widgets` section: `### Widget N: <id>`, type, version, optional header, an HTML block and a script block (TypeScript, fallback JavaScript)
 
 #### `TablesFormatter`
 Builds `*-tables.md` from official app metadata.
@@ -265,6 +268,17 @@ dts: str  # TypeScript definitions
 script: str  # Runnable code
 ```
 
+#### `ExtractedWidgetCodeFragment`
+```python
+widget_id: str
+widget_type: str  # widgetNameFreeHtml, widgetNameText, ...
+version: str
+header: str  # headersI18n values, deduplicated
+html: str
+code_ts: str
+code_js: str
+```
+
 #### `ExportStats`
 ```python
 tables: int
@@ -272,6 +286,7 @@ fields: int
 code_blocks: int
 workflows: int
 custom_scripts: int
+widgets: int
 schema_lines: int
 schema_bytes: int
 tables_md_lines: int
@@ -310,7 +325,7 @@ llm_bytes: int
 - `Encoding` - UTF-8
 - `FieldType` - current and legacy names for calculated fields, buttons, and free HTML fields
 - `WorkflowStepType` - jsScript
-- `TableInternal` - wascenarios, customScripts
+- `TableInternal` - wascenarios, customScripts, widgets (system schema ID)
 
 #### Defaults
 - `Defaults.BASE_URL` - `https://app.tabidoo.cloud/api`
@@ -584,6 +599,7 @@ Gets data from system tables.
 **Table Names**:
 - `wascenarios` - Workflows
 - `customScripts` - Custom scripts
+- `b7e89080-6bb2-4870-9e0f-7d7d491d9c7e` - Dashboard widgets. The system table has no internal API name (`.../tables/widgets/data` returns 400), so it is addressed by its global system schema ID (verified on apps.trixit.cz DEV and STAGE, 2026-10-30). Row: `{id, ver, fields: {definitions: {idWidgetType, settings: {freeHtmlContent, freeHtmlInitScript, textI18n, headersI18n}}}}`
 
 **Pagination**:
 - The runtime fetches these endpoints with `limit` + `skip`
@@ -1403,5 +1419,5 @@ ruff format .
 
 ---
 
-*Last Updated: 2026-03-13*
+*Last Updated: 2026-10-30*
 *Version: 0.1.0*

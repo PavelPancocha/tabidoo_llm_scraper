@@ -103,6 +103,10 @@ class ExportRunner:
             custom_scripts_table = api.get_table_data(selected.app_id, TableInternal.CUSTOM_SCRIPTS)
             progress.advance(export_task)
 
+            progress.update(export_task, description=Text.FETCHING_WIDGETS)
+            widgets_table = api.get_table_data(selected.app_id, TableInternal.WIDGETS)
+            progress.advance(export_task)
+
             progress.update(export_task, description=Text.EXTRACTING)
             extracted = extractor.extract(app_full)
             workflows = (
@@ -115,7 +119,12 @@ class ExportRunner:
                 if custom_scripts_table
                 else list(CollectionDefaults.EMPTY)
             )
-            llm_md = formatter.format(extracted, workflows, custom_scripts)
+            widgets = (
+                extractor.extract_widgets(widgets_table)
+                if widgets_table
+                else list(CollectionDefaults.EMPTY)
+            )
+            llm_md = formatter.format(extracted, workflows, custom_scripts, widgets)
             progress.advance(export_task)
 
             progress.update(export_task, description=Text.WRITING)
@@ -136,6 +145,7 @@ class ExportRunner:
                 schema_md,
                 tables_md,
                 llm_md,
+                widgets,
             )
         self._ui.show_stats(stats)
         self._ui.success(Text.DONE)

@@ -30,7 +30,7 @@ Default output (overridable via CLI flags):
 - `<app-name>-tables.md`
   - Markdown overview grouped by modules with table metadata and field navigation
 - `<app-name>-scripts.md`
-  - Markdown bundle of app scripts prepared for LLM input, including table scripts, field formulas, button scripts, free HTML field code, workflows, and custom scripts
+  - Markdown bundle of app scripts prepared for LLM input, including table scripts, field formulas, button scripts, free HTML field code, workflows, custom scripts, and dashboard widgets (free HTML markup and init scripts, text widget HTML)
 
 ## Large exports
 
@@ -114,6 +114,7 @@ The CLI talks directly to Tabidoo API endpoints:
 - `POST /v2/apps/getApplicationTypeScriptDefinition` (for `schema.md`, called per table with `schemaId`)
 - `GET /v2/apps/{appId}/tables/customScripts/data` (optional)
 - `GET /v2/apps/{appId}/tables/wascenarios/data` (optional)
+- `GET /v2/apps/{appId}/tables/b7e89080-6bb2-4870-9e0f-7d7d491d9c7e/data` (optional; system widgets table, addressed by its schema ID)
 
 ## Error handling and exit codes
 

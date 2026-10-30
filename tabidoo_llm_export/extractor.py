@@ -10,14 +10,19 @@ from .constants import (
     Format,
     JsonDefaults,
     JsonKey,
+    MarkdownText,
+    Newline,
     SanitizeDefaults,
+    Separator,
     UiDefaults,
+    WidgetType,
     WorkflowStepType,
 )
 from .models import (
     ExtractedCode,
     ExtractedCodeFragment,
     ExtractedCustomScriptCodeFragment,
+    ExtractedWidgetCodeFragment,
     ExtractedWorkflowCodeFragment,
 )
 
@@ -298,6 +303,76 @@ class ScriptExtractor:
                 )
             )
         return extracted
+
+    def extract_widgets(self, widgets: list[dict[str, Any]]) -> list[ExtractedWidgetCodeFragment]:
+        """Dashboard widgets with markup or code, sorted by widget ID so repeated exports diff cleanly."""
+        extracted: list[ExtractedWidgetCodeFragment] = list(CollectionDefaults.EMPTY)
+        for record in widgets:
+            fields = record.get(JsonKey.FIELDS) if isinstance(record.get(JsonKey.FIELDS), dict) else {}
+            definitions = (
+                fields.get(JsonKey.DEFINITIONS) if isinstance(fields.get(JsonKey.DEFINITIONS), dict) else {}
+            )
+            settings = (
+                definitions.get(JsonKey.SETTINGS) if isinstance(definitions.get(JsonKey.SETTINGS), dict) else {}
+            )
+            widget_type = str(definitions.get(JsonKey.ID_WIDGET_TYPE) or SanitizeDefaults.EMPTY)
+            script = (
+                settings.get(JsonKey.FREE_HTML_INIT_SCRIPT)
+                if isinstance(settings.get(JsonKey.FREE_HTML_INIT_SCRIPT), dict)
+                else {}
+            )
+            code_ts = self._text(script.get(JsonKey.WRITTEN_TYPESCRIPT))
+            code_js = self._text(script.get(JsonKey.RUNABLE_SCRIPT))
+            html = (
+                self._localized_html(settings.get(JsonKey.TEXT_I18N))
+                if widget_type == WidgetType.TEXT
+                else self._widget_html(settings.get(JsonKey.FREE_HTML_CONTENT))
+            )
+            if not (html.strip() or code_ts.strip() or code_js.strip()):
+                continue
+            version = record.get(JsonKey.VER)
+            extracted.append(
+                ExtractedWidgetCodeFragment(
+                    widget_id=str(record.get(JsonKey.ID) or SanitizeDefaults.EMPTY),
+                    widget_type=widget_type,
+                    version=SanitizeDefaults.EMPTY if version is None else str(version),
+                    header=self._localized_header(settings.get(JsonKey.HEADERS_I18N)),
+                    html=html,
+                    code_ts=code_ts,
+                    code_js=code_js,
+                )
+            )
+        return sorted(extracted, key=lambda widget: widget.widget_id)
+
+    @staticmethod
+    def _text(value: Any) -> str:
+        return value if isinstance(value, str) else SanitizeDefaults.EMPTY
+
+    @classmethod
+    def _widget_html(cls, content: Any) -> str:
+        if not isinstance(content, dict):
+            return SanitizeDefaults.EMPTY
+        written = cls._text(content.get(JsonKey.WRITTEN_HTML))
+        return written if written.strip() else cls._text(content.get(JsonKey.RUNABLE_HTML))
+
+    @classmethod
+    def _localized_html(cls, texts: Any) -> str:
+        if not isinstance(texts, dict):
+            return SanitizeDefaults.EMPTY
+        entries = [(str(language), cls._text(text)) for language, text in sorted(texts.items()) if cls._text(text).strip()]
+        if len(entries) == 1:
+            return entries[0][1]
+        return Newline.LF.join(
+            MarkdownText.WIDGET_LANGUAGE_COMMENT.format(language=language) + Newline.LF + text
+            for language, text in entries
+        )
+
+    @classmethod
+    def _localized_header(cls, headers: Any) -> str:
+        if not isinstance(headers, dict):
+            return SanitizeDefaults.EMPTY
+        values = [cls._text(text).strip() for _, text in sorted(headers.items())]
+        return Separator.LANGUAGE_VARIANTS.join(dict.fromkeys(value for value in values if value))
 
     def _extract_workflow_steps(
         self,

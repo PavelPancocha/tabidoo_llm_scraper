@@ -1,0 +1,160 @@
+from __future__ import annotations
+
+import io
+import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import Any
+from unittest.mock import patch
+
+from rich.console import Console
+
+from tabidoo_llm_export.api import TabidooApi
+from tabidoo_llm_export.constants import ProgressStep, TableInternal
+from tabidoo_llm_export.extractor import ScriptExtractor
+from tabidoo_llm_export.formatters import LlmFormatter
+from tabidoo_llm_export.models import AppSummary, ExtractedCode, ExtractedWidgetCodeFragment
+from tabidoo_llm_export.runner import ExportRunner
+from tabidoo_llm_export.ui import Ui
+
+WIDGETS_TABLE = "b7e89080-6bb2-4870-9e0f-7d7d491d9c7e"
+
+
+def widget(widget_id: str, widget_type: str, settings: dict[str, Any], ver: int | None = 3) -> dict[str, Any]:
+    # Shape of a row from GET /v2/apps/{app}/tables/b7e89080-.../data (apps.trixit.cz, 2026-10-30).
+    record: dict[str, Any] = {
+        "id": widget_id,
+        "created": "2026-01-01T00:00:00Z",
+        "modified": "2026-10-30T00:00:00Z",
+        "fields": {"definitions": {"idWidgetType": widget_type, "settings": {"filters": {"conditions": {}}, **settings}, "style": {}}},
+    }
+    if ver is not None:
+        record["ver"] = ver
+    return record
+
+
+def free_html(html: str = "", runable_html: str = "", ts: str = "", js: str = "") -> dict[str, Any]:
+    return {
+        "freeHtmlContent": {"writtenHtml": html, "runableHtml": runable_html},
+        "freeHtmlInitScript": {"writtenTypeScript": ts, "runableSript": js},
+        "headersI18n": {"en": ""},
+    }
+
+
+class WidgetExtractionTests(unittest.TestCase):
+    def test_exports_widget_html_and_script_variants_sorted_by_id(self) -> None:
+        rows = [
+            widget("c-portal", "widgetNameFreeHtml", free_html("<main>portal</main>", ts="const a: number = 1;", js="var a = 1;"), ver=84),
+            widget("a-ts-only", "widgetNameFreeHtml", free_html(ts="let x: string;")),
+            widget("e-html-only", "widgetNameFreeHtml", {**free_html(runable_html="<p>runable</p>"), "headersI18n": {"en": "Akceptace", "cs": "Akceptace"}}),
+            widget("b-js-only", "widgetNameFreeHtml", free_html(js="console.log(1)"), ver=None),
+            widget("d-empty-free-html", "widgetNameFreeHtml", free_html()),
+            widget("f-text", "widgetNameText", {"textI18n": {"en": "<p>5 kroků</p>"}}, ver=0),
+            widget("g-text-empty", "widgetNameText", {"textI18n": {"en": "  "}}),
+            widget("h-text-two-languages", "widgetNameText", {"textI18n": {"en": "<p>Hello</p>", "cs": "<p>Ahoj</p>"}}),
+            {"id": "i-malformed", "fields": None},
+        ]
+
+        widgets = ScriptExtractor().extract_widgets(rows)
+
+        self.assertEqual(
+            [w.widget_id for w in widgets],
+            ["a-ts-only", "b-js-only", "c-portal", "e-html-only", "f-text", "h-text-two-languages"],
+        )
+        by_id = {w.widget_id: w for w in widgets}
+        self.assertEqual(by_id["c-portal"], ExtractedWidgetCodeFragment(
+            "c-portal", "widgetNameFreeHtml", "84", "", "<main>portal</main>", "const a: number = 1;", "var a = 1;"))
+        self.assertEqual((by_id["a-ts-only"].html, by_id["a-ts-only"].code_ts, by_id["a-ts-only"].code_js), ("", "let x: string;", ""))
+        self.assertEqual((by_id["b-js-only"].version, by_id["b-js-only"].code_js), ("", "console.log(1)"))
+        self.assertEqual((by_id["e-html-only"].html, by_id["e-html-only"].header), ("<p>runable</p>", "Akceptace"))
+        self.assertEqual((by_id["f-text"].widget_type, by_id["f-text"].version, by_id["f-text"].html), ("widgetNameText", "0", "<p>5 kroků</p>"))
+        self.assertEqual(by_id["h-text-two-languages"].html, "<!-- cs -->\n<p>Ahoj</p>\n<!-- en -->\n<p>Hello</p>")
+
+
+class WidgetFormattingTests(unittest.TestCase):
+    def test_widgets_section_follows_custom_scripts_with_html_and_typescript_blocks(self) -> None:
+        widgets = [
+            ExtractedWidgetCodeFragment("w-1", "widgetNameFreeHtml", "84", "Portál", "<main>x</main>", "const a = 1;", "var a = 1;"),
+            ExtractedWidgetCodeFragment("w-2", "widgetNameFreeHtml", "", "", "", "", "console.log(2)"),
+            ExtractedWidgetCodeFragment("w-3", "widgetNameText", "0", "", "<p>t</p>", "", ""),
+        ]
+
+        rendered = LlmFormatter().format(ExtractedCode("app-1", "Example", []), [], [], widgets)
+
+        self.assertIn(
+            "## Widgets\n\n\n### Widget 1: w-1\n\n**Type:** widgetNameFreeHtml\n**Version:** 84\n\n**Header:** Portál\n\n"
+            "```html\n\n<main>x</main>\n```\n\n```typescript\n\nconst a = 1;\n```\n",
+            rendered,
+        )
+        self.assertNotIn("var a = 1;", rendered, "TypeScript wins over the compiled script")
+        self.assertIn("### Widget 2: w-2\n\n**Type:** widgetNameFreeHtml\n**Version:** \n\n```javascript\n\nconsole.log(2)\n```", rendered)
+        self.assertIn("### Widget 3: w-3\n\n**Type:** widgetNameText\n**Version:** 0\n\n```html\n\n<p>t</p>\n```\n", rendered)
+        self.assertNotIn("```javascript\n\n```", rendered)
+        self.assertNotIn("## Widgets", LlmFormatter().format(ExtractedCode("app-1", "Example", []), [], []))
+
+
+class FakeClient:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self.rows = rows
+        self.paths: list[str] = []
+
+    def get_json(self, path: str) -> dict[str, Any]:
+        self.paths.append(path)
+        skip = int(path.rsplit("skip=", 1)[1])
+        limit = int(path.split("limit=", 1)[1].split("&", 1)[0])
+        return {"data": self.rows[skip:skip + limit]}
+
+
+class WidgetFetchTests(unittest.TestCase):
+    def test_widgets_table_is_read_by_system_schema_id_across_pages(self) -> None:
+        rows = [widget(f"w-{index:04d}", "widgetNameFreeHtml", free_html(ts="x")) for index in range(1001)]
+        client = FakeClient(rows)
+
+        fetched = TabidooApi(client).get_table_data("app-1", TableInternal.WIDGETS)  # type: ignore[arg-type]
+
+        self.assertEqual(fetched, rows)
+        self.assertEqual(client.paths, [
+            f"/v2/apps/app-1/tables/{WIDGETS_TABLE}/data?limit=1000&skip=0",
+            f"/v2/apps/app-1/tables/{WIDGETS_TABLE}/data?limit=1000&skip=1000",
+        ])
+
+    def test_runner_writes_widgets_into_scripts_and_counts_them(self) -> None:
+        app = AppSummary("app-1", "Example", "example")
+        app_full = {"id": "app-1", "name": "Example", "internalName": "example", "tables": []}
+        rows = [widget("w-1", "widgetNameFreeHtml", free_html("<main/>", ts="const a = 1;"), ver=7)]
+        requested: list[str] = []
+
+        class ExportApi:
+            def __init__(self, client: object) -> None:
+                pass
+
+            def get_user(self) -> dict[str, str]:
+                return {}
+
+            def list_apps(self) -> list[AppSummary]:
+                return [app]
+
+            def get_app_full(self, app_id: str) -> dict[str, object]:
+                return app_full
+
+            def get_table_data(self, app_id: str, table: str) -> list[dict[str, Any]]:
+                requested.append(table)
+                return rows if table == TableInternal.WIDGETS else []
+
+            def get_typescript_definition(self, app_id: str, schema_id: str | None = None) -> str:
+                return "export {}"
+
+        with TemporaryDirectory() as directory:
+            ui = Ui(Console(file=io.StringIO()))
+            with patch("tabidoo_llm_export.runner.TabidooApi", ExportApi), patch.object(ui, "show_stats") as show_stats:
+                _, _, scripts = ExportRunner(ui, "https://example.invalid", "test", "en", 1, False).run("app-1", Path(directory), True)
+            content = scripts.read_text(encoding="utf-8")
+
+        self.assertEqual(requested, [TableInternal.WORKFLOWS, TableInternal.CUSTOM_SCRIPTS, TableInternal.WIDGETS])
+        self.assertIn("### Widget 1: w-1\n\n**Type:** widgetNameFreeHtml\n**Version:** 7", content)
+        self.assertEqual(show_stats.call_args.args[0].widgets, 1)
+        self.assertEqual(len(ProgressStep), 7)
+
+
+if __name__ == "__main__":
+    unittest.main()

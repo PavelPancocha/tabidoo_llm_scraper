@@ -35,6 +35,7 @@ class ExportStats:
     code_blocks: int
     workflows: int
     custom_scripts: int
+    widgets: int
     schema_lines: int
     schema_bytes: int
     tables_md_lines: int
@@ -74,3 +75,14 @@ class ExtractedCustomScriptCodeFragment:
     interface: str
     dts: str
     script: str
+
+
+@dataclass(frozen=True)
+class ExtractedWidgetCodeFragment:
+    widget_id: str
+    widget_type: str
+    version: str
+    header: str
+    html: str
+    code_ts: str
+    code_js: str

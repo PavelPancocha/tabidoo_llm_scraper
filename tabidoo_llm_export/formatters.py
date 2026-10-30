@@ -8,6 +8,7 @@ from .constants import JsonKey, MarkdownText, Newline, SanitizeDefaults, UiDefau
 from .models import (
     ExtractedCode,
     ExtractedCustomScriptCodeFragment,
+    ExtractedWidgetCodeFragment,
     ExtractedWorkflowCodeFragment,
 )
 
@@ -18,6 +19,7 @@ class LlmFormatter:
         extracted: ExtractedCode,
         workflows: Optional[list[ExtractedWorkflowCodeFragment]],
         custom_scripts: Optional[list[ExtractedCustomScriptCodeFragment]],
+        widgets: Optional[list[ExtractedWidgetCodeFragment]] = None,
     ) -> str:
         sections: list[str] = [
             f"{MarkdownText.TITLE_ANALYSIS}{Newline.DOUBLE}"
@@ -53,6 +55,21 @@ class LlmFormatter:
                     sections.extend(self._render_code_block(cs.dts, SanitizeDefaults.EMPTY))
                 sections.append(MarkdownText.SCRIPT_LABEL + Newline.LF)
                 sections.extend(self._render_code_block(SanitizeDefaults.EMPTY, cs.script))
+
+        if widgets:
+            sections.append(f"{MarkdownText.TITLE_WIDGETS}{Newline.DOUBLE}")
+            for idx, widget in enumerate(widgets, start=UiDefaults.INDEX_START):
+                sections.append(
+                    MarkdownText.WIDGET_PREFIX.format(index=idx, widget_id=widget.widget_id) + Newline.LF
+                )
+                sections.append(MarkdownText.WIDGET_TYPE_LABEL.format(value=widget.widget_type))
+                sections.append(MarkdownText.WIDGET_VERSION_LABEL.format(value=widget.version) + Newline.LF)
+                if widget.header:
+                    sections.append(MarkdownText.WIDGET_HEADER_LABEL.format(value=widget.header) + Newline.LF)
+                if widget.html.strip():
+                    sections.extend(self._render_code_block(SanitizeDefaults.EMPTY, SanitizeDefaults.EMPTY, widget.html))
+                if widget.code_ts.strip() or widget.code_js.strip():
+                    sections.extend(self._render_code_block(widget.code_ts, widget.code_js))
 
         return Newline.LF.join(sections)
 

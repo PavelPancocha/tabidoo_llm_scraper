@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,7 @@ from .models import (
     ExportStats,
     ExtractedCode,
     ExtractedCustomScriptCodeFragment,
+    ExtractedWidgetCodeFragment,
     ExtractedWorkflowCodeFragment,
 )
 
@@ -26,6 +28,7 @@ class StatsBuilder:
         schema_md: Path | None,
         tables_md: str,
         llm: str,
+        widgets: Sequence[ExtractedWidgetCodeFragment] = (),
     ) -> ExportStats:
         tables = app_full.get(JsonKey.TABLES)
         table_count = len(tables) if isinstance(tables, list) else CountDefaults.ZERO
@@ -51,6 +54,7 @@ class StatsBuilder:
             code_blocks=len(extracted.fragments),
             workflows=len(workflows),
             custom_scripts=len(custom_scripts),
+            widgets=len(widgets),
             schema_lines=schema_lines,
             schema_bytes=schema_md.stat().st_size if schema_md is not None else 0,
             tables_md_lines=len(tables_md.splitlines()),
