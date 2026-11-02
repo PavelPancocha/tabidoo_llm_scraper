@@ -212,6 +212,7 @@ class JsonKey(StrEnum):
     ID_WIDGET_TYPE = "idWidgetType"
     SETTINGS = "settings"
     TEXT_I18N = "textI18n"
+    TEXT = "text"
     HEADERS_I18N = "headersI18n"
 
 

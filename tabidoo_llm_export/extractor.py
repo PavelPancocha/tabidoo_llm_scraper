@@ -334,7 +334,9 @@ class ScriptExtractor:
                 definitions.get(JsonKey.SETTINGS) if isinstance(definitions.get(JsonKey.SETTINGS), dict) else {}
             )
             widget_type = str(definitions.get(JsonKey.ID_WIDGET_TYPE) or SanitizeDefaults.EMPTY)
-            if widget_type == WidgetType.TEXT and not isinstance(settings.get(JsonKey.TEXT_I18N), dict):
+            # Older text widgets keep their content in `settings.text` (string or per-language dict).
+            legacy_text = settings.get(JsonKey.TEXT)
+            if widget_type == WidgetType.TEXT and not isinstance(settings.get(JsonKey.TEXT_I18N), dict) and not isinstance(legacy_text, (str, dict)):
                 raise ApiError("Incomplete text widget content")
             if widget_type == WidgetType.FREE_HTML and not isinstance(settings.get(JsonKey.FREE_HTML_CONTENT), dict) and not isinstance(settings.get(JsonKey.FREE_HTML_INIT_SCRIPT), dict):
                 raise ApiError("Incomplete HTML widget content")
@@ -346,7 +348,11 @@ class ScriptExtractor:
             code_ts = self._text(script.get(JsonKey.WRITTEN_TYPESCRIPT))
             code_js = self._text(script.get(JsonKey.RUNABLE_SCRIPT))
             html = (
-                self._localized_html(settings.get(JsonKey.TEXT_I18N))
+                (
+                    self._localized_html(settings.get(JsonKey.TEXT_I18N))
+                    if isinstance(settings.get(JsonKey.TEXT_I18N), dict)
+                    else self._text(legacy_text) if isinstance(legacy_text, str) else self._localized_html(legacy_text)
+                )
                 if widget_type == WidgetType.TEXT
                 else self._widget_html(settings.get(JsonKey.FREE_HTML_CONTENT))
             )

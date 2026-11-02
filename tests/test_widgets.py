@@ -262,3 +262,18 @@ class WidgetFetchTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LegacyTextWidgetTests(unittest.TestCase):
+    def test_legacy_text_key_is_exported(self) -> None:
+        from tabidoo_llm_export.extractor import ScriptExtractor
+        row = {"id": "w1", "ver": 1, "fields": {"definitions": {"idWidgetType": "widgetNameText", "settings": {"filters": [], "text": "<p>Hi</p>"}, "style": {}}}}
+        [fragment] = ScriptExtractor().extract_widgets([row])
+        self.assertEqual(fragment.html, "<p>Hi</p>")
+
+    def test_text_widget_without_any_content_key_still_fails(self) -> None:
+        from tabidoo_llm_export.errors import ApiError
+        from tabidoo_llm_export.extractor import ScriptExtractor
+        row = {"id": "w2", "fields": {"definitions": {"idWidgetType": "widgetNameText", "settings": {"filters": []}}}}
+        with self.assertRaises(ApiError):
+            ScriptExtractor().extract_widgets([row])
