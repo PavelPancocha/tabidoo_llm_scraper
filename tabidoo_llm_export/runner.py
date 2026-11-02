@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -16,7 +17,7 @@ from .constants import (
     TableInternal,
     Text,
 )
-from .errors import ApiError, CliError, InvalidConfigError, UserInputError
+from .errors import ApiError, InvalidConfigError, UserInputError
 from .extractor import ScriptExtractor
 from .formatters import LlmFormatter, TablesFormatter
 from .http_client import HttpClient
@@ -83,12 +84,8 @@ class ExportRunner:
             export_task = progress.add_task(Text.EXPORTING, total=len(ProgressStep))
 
             progress.update(export_task, description=Text.FETCHING_TSD)
-            schema_md: Path | None = Path(temporary_dir) / "schema.ts"
-            try:
-                tsd_fetcher.fetch(selected.app_id, app_full, schema_md)
-            except CliError as exc:
-                schema_md = None
-                self._ui.warning(Text.SKIP_SCHEMA_ERROR.format(reason=str(exc)))
+            schema_md = Path(temporary_dir) / "schema.ts"
+            tsd_fetcher.fetch(selected.app_id, app_full, schema_md)
             progress.advance(export_task)
 
             progress.update(export_task, description=Text.BUILDING_TABLES)
@@ -106,6 +103,11 @@ class ExportRunner:
             progress.update(export_task, description=Text.FETCHING_WIDGETS)
             widgets_table = api.get_table_data(selected.app_id, TableInternal.WIDGETS)
             progress.advance(export_task)
+
+            for table, rows in ((TableInternal.WORKFLOWS, workflows_table), (TableInternal.CUSTOM_SCRIPTS, custom_scripts_table), (TableInternal.WIDGETS, widgets_table)):
+                counts = api.system_table_counts.get(str(table))
+                if counts != {"expected": len(rows), "fetched": len(rows)}:
+                    raise ApiError(f"Incomplete system-table count for {table}")
 
             progress.update(export_task, description=Text.EXTRACTING)
             extracted = extractor.extract(app_full)
@@ -135,6 +137,21 @@ class ExportRunner:
                 tables_md,
                 llm_md,
             )
+            table_count = len(app_full[JsonKey.TABLES])
+            completeness = {
+                "version": 1,
+                "status": "PASS",
+                "appId": selected.app_id,
+                "tables": {"expected": table_count, "tsdFetched": table_count},
+                "systemTables": api.system_table_counts,
+                "fragments": {
+                    "tableScripts": len(extracted.fragments),
+                    "workflows": len(workflows),
+                    "customScripts": len(custom_scripts),
+                    "widgets": len(widgets),
+                },
+            }
+            (out_dir / "export-completeness.json").write_text(json.dumps(completeness, indent=2) + "\n", encoding="utf-8")
             progress.advance(export_task)
 
             stats = StatsBuilder.build(

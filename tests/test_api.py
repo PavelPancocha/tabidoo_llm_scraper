@@ -158,24 +158,19 @@ class TsdFetcherTests(unittest.TestCase):
             "export interface IDooApiTableInvoices {}\n",
         )
 
-    def test_skips_malformed_tables_and_uses_default_table_name(self) -> None:
+    def test_rejects_malformed_tables(self) -> None:
+        for table in (None, {"internalNameApi": "missing_id"}):
+            with self.subTest(table=table), self.assertRaises(ApiError):
+                fetch_text(TsdFetcher(FakeDefinitionApi({})), {"tables": [table]})  # type: ignore[arg-type]
+
         api = FakeDefinitionApi({"table-1": "export interface IDooApiTableUnknown {}"})
-        app_full = {
-            "tables": [
-                None,
-                {"internalNameApi": "missing_id"},
-                {"id": "table-1", "internalNameApi": ""},
-            ]
-        }
-
-        result = fetch_text(TsdFetcher(api), app_full)  # type: ignore[arg-type]
-
+        result = fetch_text(TsdFetcher(api), {"tables": [{"id": "table-1", "internalNameApi": ""}]})  # type: ignore[arg-type]
         self.assertEqual(api.calls, [("app-1", "table-1")])
         self.assertIn("// Table: table (table-1)", result)
 
-    def test_falls_back_to_app_level_schema_when_no_valid_table_ids_exist(self) -> None:
+    def test_falls_back_to_app_level_schema_when_no_tables_exist(self) -> None:
         api = FakeDefinitionApi({None: "export interface IDooModelBase {}"})
-        app_full = {"tables": [{"internalNameApi": "missing_id"}]}
+        app_full = {"tables": []}
 
         result = fetch_text(TsdFetcher(api), app_full)  # type: ignore[arg-type]
 

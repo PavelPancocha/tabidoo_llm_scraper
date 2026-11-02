@@ -77,12 +77,14 @@ class DiskSchemaTests(unittest.TestCase):
                 TsdFetcher(DefinitionApi({"0": "test"})).fetch("app-1", {"tables": [{"id": "0"}]}, root / "schema.ts")  # type: ignore[arg-type]
             self.assertEqual(list(root.iterdir()), [])
 
-    def test_runner_preserves_three_outputs_partial_export_and_temporary_cleanup(self) -> None:
+    def test_runner_requires_schema_and_cleans_temporary_files(self) -> None:
         app = AppSummary("app-1", "Example", "example")
         app_full = {"id": "app-1", "name": "Example", "internalName": "example", "tables": [{"id": "0", "internalNameApi": "orders", "items": []}]}
         definition = "export interface Test { title: '😀č' }\r\n"
 
         class ExportApi(DefinitionApi):
+            system_table_counts = {name: {"expected": 0, "fetched": 0} for name in ("wascenarios", "customScripts", "b7e89080-6bb2-4870-9e0f-7d7d491d9c7e")}
+
             def get_user(self) -> dict[str, str]:
                 return {}
 
@@ -108,22 +110,24 @@ class DiskSchemaTests(unittest.TestCase):
                     fetch(fetcher, app_id, data, destination)
 
                 with patch("tabidoo_llm_export.runner.TabidooApi", return_value=ExportApi({"0": definition}, fail)), patch.object(TsdFetcher, "fetch", capture_fetch), patch.object(ui, "show_stats") as show_stats:
-                    schema, tables, scripts = ExportRunner(ui, "https://example.invalid", "test", "en", 1, False).run("app-1", root, True)
+                    if fail:
+                        with self.assertRaisesRegex(ApiError, "definition failed"):
+                            ExportRunner(ui, "https://example.invalid", "test", "en", 1, False).run("app-1", root, True)
+                    else:
+                        schema, tables, scripts = ExportRunner(ui, "https://example.invalid", "test", "en", 1, False).run("app-1", root, True)
                 expected = "// Table: orders (0)\n\n" + definition.rstrip() + "\n"
                 if fail:
-                    self.assertIsNone(schema)
-                    self.assertFalse((root / "example-schema.md").exists())
-                    self.assertEqual(show_stats.call_args.args[0].schema_bytes, 0)
+                    self.assertEqual((root / "example-schema.md").read_text(), "stale")
+                    show_stats.assert_not_called()
                 else:
-                    assert schema is not None
                     self.assertEqual(schema.read_bytes(), MarkdownRenderer.wrap_typescript(expected).encode("utf-8"))
                     self.assertEqual(show_stats.call_args.args[0].schema_bytes, len(expected.encode("utf-8")))
-                self.assertEqual(tables.read_bytes(), TablesFormatter().format(app_full).encode("utf-8"))
-                extracted = ScriptExtractor().extract(app_full)
-                self.assertEqual(scripts.read_bytes(), LlmFormatter().format(extracted, [], []).encode("utf-8"))
+                    self.assertEqual(tables.read_bytes(), TablesFormatter().format(app_full).encode("utf-8"))
+                    extracted = ScriptExtractor().extract(app_full)
+                    self.assertEqual(scripts.read_bytes(), LlmFormatter().format(extracted, [], []).encode("utf-8"))
                 self.assertEqual(len(destinations), 1)
                 self.assertFalse(destinations[0].parent.exists(), "Runner must remove its private scratch directory")
-                self.assertEqual(len(list(root.iterdir())), 2 if fail else 3)
+                self.assertEqual(len(list(root.iterdir())), 1 if fail else 4)
 
 
 if __name__ == "__main__":

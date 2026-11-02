@@ -21,7 +21,7 @@ from .constants import (
     Text,
 )
 from .env import JsonUnwrapper
-from .errors import ApiError, CliError
+from .errors import ApiError
 from .http_client import HttpClient
 from .models import AppSummary
 
@@ -29,6 +29,7 @@ from .models import AppSummary
 class TabidooApi:
     def __init__(self, client: HttpClient) -> None:
         self._client = client
+        self.system_table_counts: dict[str, dict[str, int]] = {}
 
     def get_user(self) -> dict[str, Any]:
         payload = self._client.get_json(Endpoint.USERS_ME)
@@ -49,35 +50,58 @@ class TabidooApi:
         data = JsonUnwrapper.unwrap(payload)
         if not isinstance(data, dict):
             raise ApiError(Text.APP_SHAPE)
+        tables = data.get(JsonKey.TABLES)
+        if not isinstance(tables, list) or any(
+            not isinstance(table, dict)
+            or not isinstance(table.get(JsonKey.ID), str)
+            or not table[JsonKey.ID]
+            or not isinstance(table.get(JsonKey.ITEMS), list)
+            or any(not isinstance(item, dict) for item in table[JsonKey.ITEMS])
+            for table in tables
+        ):
+            raise ApiError("Incomplete application table list")
+        if len({table[JsonKey.ID] for table in tables}) != len(tables):
+            raise ApiError("Repeated application table ID")
         return data
 
-    def get_table_data(self, app_id: str, table_internal: TableInternal) -> Optional[list[dict[str, Any]]]:
+    def get_table_data(self, app_id: str, table_internal: TableInternal) -> list[dict[str, Any]]:
         base_path = Endpoint.TABLE_DATA.format(app_id=app_id, table=table_internal)
+        count_payload = JsonUnwrapper.unwrap(self._client.get_json(Endpoint.TABLE_DATA_COUNT.format(app_id=app_id, table=table_internal)))
+        expected = count_payload.get("count") if isinstance(count_payload, dict) else None
+        if type(expected) is not int or expected < 0:
+            raise ApiError(f"Invalid system-table count for {table_internal}")
         limit = Defaults.TABLE_DATA_PAGE_LIMIT
         skip = 0
         records: list[dict[str, Any]] = list(CollectionDefaults.EMPTY)
+        seen_ids: set[str] = set()
 
         while True:
             path = f"{base_path}?limit={limit}&skip={skip}"
-            try:
-                payload = self._client.get_json(path)
-            except CliError:
-                return records if records else None
-
+            payload = self._client.get_json(path)
             data = JsonUnwrapper.unwrap(payload)
             if not isinstance(data, list):
-                return records if records else None
+                raise ApiError(f"Invalid system-table page for {table_internal} at skip={skip}")
             if not data:
                 break
 
-            page = [row for row in data if isinstance(row, dict)]
-            records.extend(page)
+            if len(data) > limit:
+                raise ApiError(f"Oversized system-table page for {table_internal} at skip={skip}")
+            for row in data:
+                if not isinstance(row, dict) or not isinstance(row.get(JsonKey.ID), str) or not row[JsonKey.ID]:
+                    raise ApiError(f"Invalid system-table row for {table_internal} at skip={skip}")
+                if row[JsonKey.ID] in seen_ids:
+                    raise ApiError(f"Repeated system-table row for {table_internal} at skip={skip}")
+                seen_ids.add(row[JsonKey.ID])
+                records.append(row)
 
             if len(data) < limit:
                 break
 
             skip += len(data)
 
+        if len(records) != expected:
+            raise ApiError(f"Incomplete system-table data for {table_internal}: expected {expected}, fetched {len(records)}")
+        self.system_table_counts[str(table_internal)] = {"expected": expected, "fetched": len(records)}
         return records
 
     def get_typescript_definition(self, app_id: str, schema_id: Optional[str] = None) -> str:
@@ -109,7 +133,7 @@ class TsdFetcher:
     def fetch(self, app_id: str, app_full: dict[str, Any], destination: Path) -> None:
         tables = app_full.get(JsonKey.TABLES)
         if not isinstance(tables, list):
-            tables = list(CollectionDefaults.EMPTY)
+            raise ApiError("Incomplete application table list")
 
         parts: list[tuple[str, Path]] = []
 
@@ -120,10 +144,10 @@ class TsdFetcher:
                 while len(pending) < self._max_in_flight:
                     for table in remaining:
                         if not isinstance(table, dict):
-                            continue
+                            raise ApiError("Invalid application table")
                         schema_id = str(table.get(JsonKey.ID, SanitizeDefaults.EMPTY)).strip()
                         if not schema_id:
-                            continue
+                            raise ApiError("Application table missing schema ID")
                         internal = (
                             str(table.get(JsonKey.INTERNAL_NAME_API, SanitizeDefaults.EMPTY)).strip()
                             or DefaultName.TABLE

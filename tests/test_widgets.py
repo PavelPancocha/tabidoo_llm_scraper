@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -11,6 +12,7 @@ from rich.console import Console
 
 from tabidoo_llm_export.api import TabidooApi
 from tabidoo_llm_export.constants import ProgressStep, TableInternal
+from tabidoo_llm_export.errors import ApiError
 from tabidoo_llm_export.extractor import ScriptExtractor
 from tabidoo_llm_export.formatters import LlmFormatter
 from tabidoo_llm_export.models import AppSummary, ExtractedCode, ExtractedWidgetCodeFragment
@@ -100,12 +102,66 @@ class FakeClient:
 
     def get_json(self, path: str) -> dict[str, Any]:
         self.paths.append(path)
+        if path.endswith("/count"):
+            return {"data": {"count": len(self.rows)}}
         skip = int(path.rsplit("skip=", 1)[1])
         limit = int(path.split("limit=", 1)[1].split("&", 1)[0])
         return {"data": self.rows[skip:skip + limit]}
 
 
+class SimpleClient:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self.payload = payload
+
+    def get_json(self, path: str) -> dict[str, Any]:
+        return self.payload
+
+
 class WidgetFetchTests(unittest.TestCase):
+    def test_app_detail_requires_complete_unique_table_metadata(self) -> None:
+        valid = {"id": "t-1", "items": []}
+        for tables in (None, {}, [None], [{"id": "t-1"}], [{"id": "t-1", "items": [None]}], [valid, valid]):
+            with self.subTest(tables=tables):
+                client = SimpleClient({"data": {"tables": tables}})
+                with self.assertRaises(ApiError):
+                    TabidooApi(client).get_app_full("app-1")
+        self.assertEqual(TabidooApi(SimpleClient({"data": {"tables": []}})).get_app_full("app-1"), {"tables": []})
+
+    def test_system_table_fetch_requires_count_and_every_unique_row(self) -> None:
+        rows = [widget(f"w-{index:04d}", "widgetNameText", {}) for index in range(1001)]
+        for count, page, error in (
+            (1002, rows, "Incomplete"),
+            (1001, rows[:1000] + [rows[0]], "Repeated"),
+            (1001, rows[:1000] + [None], "Invalid"),
+            ("1001", rows, "count"),
+        ):
+            with self.subTest(error=error):
+                class Client(FakeClient):
+                    def get_json(self, path: str) -> dict[str, Any]:
+                        if path.endswith("/count"):
+                            return {"data": {"count": count}}
+                        if "skip=1000" in path:
+                            return {"data": page[1000:]}
+                        return {"data": page[:1000]}
+
+                with self.assertRaisesRegex(ApiError, error):
+                    TabidooApi(Client(rows)).get_table_data("app-1", TableInternal.WIDGETS)
+
+        self.assertEqual(TabidooApi(FakeClient([])).get_table_data("app-1", TableInternal.WIDGETS), [])
+
+    def test_system_table_http_error_propagates_before_or_after_first_page(self) -> None:
+        rows = [widget(f"w-{index:04d}", "widgetNameText", {}) for index in range(1001)]
+        for failing_path in ("/count", "skip=1000"):
+            with self.subTest(failing_path=failing_path):
+                class Client(FakeClient):
+                    def get_json(self, path: str) -> dict[str, Any]:
+                        if failing_path in path:
+                            raise ApiError("GET failed")
+                        return super().get_json(path)
+
+                with self.assertRaisesRegex(ApiError, "GET failed"):
+                    TabidooApi(Client(rows)).get_table_data("app-1", TableInternal.WIDGETS)
+
     def test_widgets_table_is_read_by_system_schema_id_across_pages(self) -> None:
         rows = [widget(f"w-{index:04d}", "widgetNameFreeHtml", free_html(ts="x")) for index in range(1001)]
         client = FakeClient(rows)
@@ -114,6 +170,7 @@ class WidgetFetchTests(unittest.TestCase):
 
         self.assertEqual(fetched, rows)
         self.assertEqual(client.paths, [
+            f"/v2/apps/app-1/tables/{WIDGETS_TABLE}/data/count",
             f"/v2/apps/app-1/tables/{WIDGETS_TABLE}/data?limit=1000&skip=0",
             f"/v2/apps/app-1/tables/{WIDGETS_TABLE}/data?limit=1000&skip=1000",
         ])
@@ -126,7 +183,7 @@ class WidgetFetchTests(unittest.TestCase):
 
         class ExportApi:
             def __init__(self, client: object) -> None:
-                pass
+                self.system_table_counts: dict[str, dict[str, int]] = {}
 
             def get_user(self) -> dict[str, str]:
                 return {}
@@ -139,7 +196,9 @@ class WidgetFetchTests(unittest.TestCase):
 
             def get_table_data(self, app_id: str, table: str) -> list[dict[str, Any]]:
                 requested.append(table)
-                return rows if table == TableInternal.WIDGETS else []
+                result = rows if table == TableInternal.WIDGETS else []
+                self.system_table_counts[str(table)] = {"expected": len(result), "fetched": len(result)}
+                return result
 
             def get_typescript_definition(self, app_id: str, schema_id: str | None = None) -> str:
                 return "export {}"
@@ -149,10 +208,21 @@ class WidgetFetchTests(unittest.TestCase):
             with patch("tabidoo_llm_export.runner.TabidooApi", ExportApi), patch.object(ui, "show_stats") as show_stats:
                 _, _, scripts = ExportRunner(ui, "https://example.invalid", "test", "en", 1, False).run("app-1", Path(directory), True)
             content = scripts.read_text(encoding="utf-8")
+            completeness = json.loads((Path(directory) / "export-completeness.json").read_text())
 
         self.assertEqual(requested, [TableInternal.WORKFLOWS, TableInternal.CUSTOM_SCRIPTS, TableInternal.WIDGETS])
         self.assertIn("### Widget 1: w-1\n\n**Type:** widgetNameFreeHtml\n**Version:** 7", content)
         self.assertEqual(show_stats.call_args.args[0].widgets, 1)
+        self.assertEqual(completeness, {
+            "version": 1, "status": "PASS", "appId": "app-1",
+            "tables": {"expected": 0, "tsdFetched": 0},
+            "systemTables": {
+                "wascenarios": {"expected": 0, "fetched": 0},
+                "customScripts": {"expected": 0, "fetched": 0},
+                WIDGETS_TABLE: {"expected": 1, "fetched": 1},
+            },
+            "fragments": {"tableScripts": 0, "workflows": 0, "customScripts": 0, "widgets": 1},
+        })
         self.assertEqual(len(ProgressStep), 7)
 
 

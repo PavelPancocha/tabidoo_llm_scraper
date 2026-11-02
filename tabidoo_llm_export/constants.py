@@ -139,6 +139,7 @@ class Endpoint(StrEnum):
     APP_DETAIL = "/v2/apps/{app_id}"
     TSD = "/v2/apps/getApplicationTypeScriptDefinition"
     TABLE_DATA = "/v2/apps/{app_id}/tables/{table}/data"
+    TABLE_DATA_COUNT = "/v2/apps/{app_id}/tables/{table}/data/count"
 
 
 class TableInternal(StrEnum):
