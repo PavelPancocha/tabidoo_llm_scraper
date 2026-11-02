@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
@@ -127,6 +128,7 @@ class ExportRunner:
                 else list(CollectionDefaults.EMPTY)
             )
             llm_md = formatter.format(extracted, workflows, custom_scripts, widgets)
+            expected_fragments = {"tableScripts": len(extracted.fragments), "workflows": len(workflows), "customScripts": len(custom_scripts), "widgets": len(widgets)}
             progress.advance(export_task)
 
             progress.update(export_task, description=Text.WRITING)
@@ -138,18 +140,22 @@ class ExportRunner:
                 llm_md,
             )
             table_count = len(app_full[JsonKey.TABLES])
+            if schema_path is None:
+                raise ApiError("Missing written schema")
+            written_scripts = scripts_path.read_text(encoding="utf-8")
+            for key, heading in (("tableScripts", "## Code Block "), ("workflows", "### Workflow "), ("customScripts", "### Custom Script "), ("widgets", "### Widget ")):
+                if len(re.findall(r"^" + re.escape(heading), written_scripts, re.MULTILINE)) != expected_fragments[key]:
+                    raise ApiError("Incomplete written script section: " + key)
+            with schema_path.open(encoding="utf-8") as written_schema:
+                if sum(line.startswith("// Table: ") for line in written_schema) != table_count:
+                    raise ApiError("Incomplete written schema section")
             completeness = {
                 "version": 1,
                 "status": "PASS",
                 "appId": selected.app_id,
                 "tables": {"expected": table_count, "tsdFetched": table_count},
                 "systemTables": api.system_table_counts,
-                "fragments": {
-                    "tableScripts": len(extracted.fragments),
-                    "workflows": len(workflows),
-                    "customScripts": len(custom_scripts),
-                    "widgets": len(widgets),
-                },
+                "fragments": expected_fragments,
             }
             (out_dir / "export-completeness.json").write_text(json.dumps(completeness, indent=2) + "\n", encoding="utf-8")
             progress.advance(export_task)

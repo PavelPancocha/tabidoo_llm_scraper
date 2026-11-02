@@ -25,6 +25,7 @@ from .models import (
     ExtractedWidgetCodeFragment,
     ExtractedWorkflowCodeFragment,
 )
+from .errors import ApiError
 
 
 class ScriptExtractor:
@@ -264,9 +265,13 @@ class ScriptExtractor:
     def extract_workflows(self, workflows: list[dict[str, Any]]) -> list[ExtractedWorkflowCodeFragment]:
         extracted: list[ExtractedWorkflowCodeFragment] = list(CollectionDefaults.EMPTY)
         for record in workflows:
-            fields = record.get(JsonKey.FIELDS) if isinstance(record.get(JsonKey.FIELDS), dict) else {}
+            fields = record.get(JsonKey.FIELDS)
+            if not isinstance(fields, dict) or not isinstance(fields.get(JsonKey.DEFINITION), dict):
+                raise ApiError("Incomplete workflow fields/definition")
             name = str(fields.get(JsonKey.NAME, SanitizeDefaults.EMPTY))
-            definition = fields.get(JsonKey.DEFINITION) if isinstance(fields.get(JsonKey.DEFINITION), dict) else {}
+            definition = fields[JsonKey.DEFINITION]
+            if not isinstance(definition.get(JsonKey.TRIGGERS), list) or not isinstance(definition.get(JsonKey.STEPS), list):
+                raise ApiError("Incomplete workflow triggers/steps")
             triggers = definition.get(JsonKey.TRIGGERS)
             triggers_json = (
                 json.dumps(triggers, ensure_ascii=True)
@@ -286,7 +291,12 @@ class ScriptExtractor:
     ) -> list[ExtractedCustomScriptCodeFragment]:
         extracted: list[ExtractedCustomScriptCodeFragment] = list(CollectionDefaults.EMPTY)
         for record in custom_scripts:
-            fields = record.get(JsonKey.FIELDS) if isinstance(record.get(JsonKey.FIELDS), dict) else {}
+            fields = record.get(JsonKey.FIELDS)
+            if not isinstance(fields, dict) or not isinstance(fields.get(JsonKey.SCRIPT), dict):
+                raise ApiError("Incomplete custom script fields/script")
+            script_value = fields[JsonKey.SCRIPT]
+            if JsonKey.RUNABLE_SCRIPT not in script_value or script_value[JsonKey.RUNABLE_SCRIPT] is not None and not isinstance(script_value[JsonKey.RUNABLE_SCRIPT], str):
+                raise ApiError("Incomplete custom script content")
             dts = fields.get(JsonKey.DTS) if isinstance(fields.get(JsonKey.DTS), dict) else {}
             script = fields.get(JsonKey.SCRIPT) if isinstance(fields.get(JsonKey.SCRIPT), dict) else {}
             extracted.append(
@@ -308,14 +318,22 @@ class ScriptExtractor:
         """Dashboard widgets with markup or code, sorted by widget ID so repeated exports diff cleanly."""
         extracted: list[ExtractedWidgetCodeFragment] = list(CollectionDefaults.EMPTY)
         for record in widgets:
-            fields = record.get(JsonKey.FIELDS) if isinstance(record.get(JsonKey.FIELDS), dict) else {}
+            fields = record.get(JsonKey.FIELDS)
+            if not isinstance(fields, dict) or not isinstance(fields.get(JsonKey.DEFINITIONS), dict):
+                raise ApiError("Incomplete widget fields/definitions")
             definitions = (
                 fields.get(JsonKey.DEFINITIONS) if isinstance(fields.get(JsonKey.DEFINITIONS), dict) else {}
             )
+            if not isinstance(definitions.get(JsonKey.SETTINGS), dict) or not isinstance(definitions.get(JsonKey.ID_WIDGET_TYPE), str) or not definitions[JsonKey.ID_WIDGET_TYPE].strip():
+                raise ApiError("Incomplete widget type/settings")
             settings = (
                 definitions.get(JsonKey.SETTINGS) if isinstance(definitions.get(JsonKey.SETTINGS), dict) else {}
             )
             widget_type = str(definitions.get(JsonKey.ID_WIDGET_TYPE) or SanitizeDefaults.EMPTY)
+            if widget_type == WidgetType.TEXT and not isinstance(settings.get(JsonKey.TEXT_I18N), dict):
+                raise ApiError("Incomplete text widget content")
+            if widget_type == WidgetType.FREE_HTML and not isinstance(settings.get(JsonKey.FREE_HTML_CONTENT), dict) and not isinstance(settings.get(JsonKey.FREE_HTML_INIT_SCRIPT), dict):
+                raise ApiError("Incomplete HTML widget content")
             script = (
                 settings.get(JsonKey.FREE_HTML_INIT_SCRIPT)
                 if isinstance(settings.get(JsonKey.FREE_HTML_INIT_SCRIPT), dict)
@@ -383,11 +401,15 @@ class ScriptExtractor:
         extracted: list[ExtractedWorkflowCodeFragment] = list(CollectionDefaults.EMPTY)
         for step in steps:
             if not isinstance(step, dict):
-                continue
+                raise ApiError("Invalid workflow step")
 
             data = step.get(JsonKey.DATA) if isinstance(step.get(JsonKey.DATA), dict) else {}
             if step.get(JsonKey.TYPE) == WorkflowStepType.JS_SCRIPT:
-                script = data.get(JsonKey.SCRIPT) if isinstance(data.get(JsonKey.SCRIPT), dict) else {}
+                if not isinstance(data.get(JsonKey.SCRIPT), dict):
+                    raise ApiError("Incomplete workflow script step")
+                script = data[JsonKey.SCRIPT]
+                if not any(key in script for key in (JsonKey.RUNABLE_SCRIPT, JsonKey.WRITTEN_TYPESCRIPT)) or any(value is not None and not isinstance(value, str) for key, value in script.items() if key in (JsonKey.RUNABLE_SCRIPT, JsonKey.WRITTEN_TYPESCRIPT)):
+                    raise ApiError("Incomplete workflow script content")
                 code_js = (
                     script.get(JsonKey.RUNABLE_SCRIPT)
                     if isinstance(script.get(JsonKey.RUNABLE_SCRIPT), str)

@@ -44,8 +44,8 @@ class DiskSchemaTests(unittest.TestCase):
         self.assertEqual((stats.tables_md_lines, stats.tables_md_bytes), (len("tables\r\nč".splitlines()), len("tables\r\nč".encode("utf-8"))))
         self.assertEqual((stats.llm_lines, stats.llm_bytes), (len("scripts\n😀".splitlines()), len("scripts\n😀".encode("utf-8"))))
 
-    def test_numbered_spools_preserve_legacy_join_and_empty_last_definition(self) -> None:
-        for definitions in [("", "", ""), ("  α\r\n😀\vline\u2028", "", "\t\n\u2003"), ("", "middle\x1cnext", "last\r\n")]:
+    def test_numbered_spools_preserve_legacy_join_and_reject_empty_definition(self) -> None:
+        for definitions in [("first", "middle", "last"), ("  α\r\n😀\vline\u2028", "second", "\tthird\n\u2003"), ("first", "middle\x1cnext", "last\r\n")]:
             with self.subTest(definitions=definitions), TemporaryDirectory() as directory:
                 root = Path(directory)
                 source = root / "schema.ts"
@@ -56,6 +56,12 @@ class DiskSchemaTests(unittest.TestCase):
                 self.assertEqual(source.read_bytes(), expected.encode("utf-8"))
                 self.assertEqual(list(root.iterdir()), [source], "Numbered spools must be removed")
                 self.check_output_and_stats(source, expected, root)
+
+        for empty in ("", " \r\n\t"):
+            with self.subTest(empty=empty), TemporaryDirectory() as directory:
+                with self.assertRaisesRegex(ApiError, "Empty per-table"):
+                    TsdFetcher(DefinitionApi({"0": "valid", "1": empty})).fetch("app-1", {"tables": [{"id": "0"}, {"id": "1"}]}, Path(directory) / "schema.ts")
+                self.assertEqual(list(Path(directory).iterdir()), [])
 
     def test_fallback_preserves_all_splitlines_and_unicode_rstrip_at_chunk_boundaries(self) -> None:
         contents = ["", "\r\n", "\x1f", "\t\u2003\n", "a\rb\r\nc\nd\ve\ff\x1cg\x1dh\x1ei\x85j\u2028k\u2029l", "x" * 65_535 + "\r\n😀č\u2028tail" + "\u2003" * 65_537, "x" * 65_536 + "tail", "x" * 65_535 + "\r", "😀" * 65_535 + "\r\n"]

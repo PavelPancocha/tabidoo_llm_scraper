@@ -54,7 +54,6 @@ class WidgetExtractionTests(unittest.TestCase):
             widget("f-text", "widgetNameText", {"textI18n": {"en": "<p>5 kroků</p>"}}, ver=0),
             widget("g-text-empty", "widgetNameText", {"textI18n": {"en": "  "}}),
             widget("h-text-two-languages", "widgetNameText", {"textI18n": {"en": "<p>Hello</p>", "cs": "<p>Ahoj</p>"}}),
-            {"id": "i-malformed", "fields": None},
         ]
 
         widgets = ScriptExtractor().extract_widgets(rows)
@@ -71,6 +70,28 @@ class WidgetExtractionTests(unittest.TestCase):
         self.assertEqual((by_id["e-html-only"].html, by_id["e-html-only"].header), ("<p>runable</p>", "Akceptace"))
         self.assertEqual((by_id["f-text"].widget_type, by_id["f-text"].version, by_id["f-text"].html), ("widgetNameText", "0", "<p>5 kroků</p>"))
         self.assertEqual(by_id["h-text-two-languages"].html, "<!-- cs -->\n<p>Ahoj</p>\n<!-- en -->\n<p>Hello</p>")
+
+    def test_partial_system_projections_refuse_instead_of_looking_empty(self) -> None:
+        extractor = ScriptExtractor()
+        for fields in (None, {}, {"definition": {}}, {"definition": {"steps": [], "triggers": None}}):
+            with self.subTest(fields=fields), self.assertRaises(ApiError):
+                extractor.extract_workflows([{"id": "offline", "fields": fields}])
+        self.assertEqual(extractor.extract_workflows([{"fields": {"definition": {"triggers": [], "steps": []}}}]), [])
+        for method in (extractor.extract_custom_scripts, extractor.extract_widgets):
+            for fields in (None, {}):
+                with self.subTest(method=method.__name__, fields=fields), self.assertRaises(ApiError):
+                    method([{"id": "offline", "fields": fields}])
+        with self.assertRaisesRegex(ApiError, "custom script content"):
+            extractor.extract_custom_scripts([{"fields": {"script": {}}}])
+        with self.assertRaisesRegex(ApiError, "text widget content"):
+            extractor.extract_widgets([widget("offline", "widgetNameText", {})])
+        with self.assertRaisesRegex(ApiError, "HTML widget content"):
+            extractor.extract_widgets([widget("offline", "widgetNameFreeHtml", {})])
+
+    def test_empty_api_typescript_response_refuses(self) -> None:
+        for content in ("", " \r\n\t", None):
+            with self.subTest(content=content), self.assertRaises(ApiError):
+                TabidooApi(SimpleClient({"content": content})).get_typescript_definition("offline", "offline-table")
 
 
 class WidgetFormattingTests(unittest.TestCase):
@@ -114,6 +135,9 @@ class SimpleClient:
         self.payload = payload
 
     def get_json(self, path: str) -> dict[str, Any]:
+        return self.payload
+
+    def post_json(self, path: str, body: object) -> dict[str, Any]:
         return self.payload
 
 
@@ -177,8 +201,10 @@ class WidgetFetchTests(unittest.TestCase):
 
     def test_runner_writes_widgets_into_scripts_and_counts_them(self) -> None:
         app = AppSummary("app-1", "Example", "example")
-        app_full = {"id": "app-1", "name": "Example", "internalName": "example", "tables": []}
+        app_full = {"id": "app-1", "name": "Example", "internalName": "example", "tables": [{"id": "first", "internalNameApi": "first", "items": []}, {"id": "second", "internalNameApi": "second", "items": []}]}
         rows = [widget("w-1", "widgetNameFreeHtml", free_html("<main/>", ts="const a = 1;"), ver=7)]
+        workflows = [{"id": f"workflow-{i}", "fields": {"name": f"offline workflow {i}", "definition": {"triggers": [], "steps": [{"type": "jsScript", "data": {"script": {"runableSript": "void 0;"}}}]}}} for i in range(2)]
+        custom = [{"id": f"custom-{i}", "fields": {"name": f"offline custom {i}", "namespace": f"offline{i}", "interface": "offline", "script": {"runableSript": "void 0;"}}} for i in range(2)]
         requested: list[str] = []
 
         class ExportApi:
@@ -196,7 +222,7 @@ class WidgetFetchTests(unittest.TestCase):
 
             def get_table_data(self, app_id: str, table: str) -> list[dict[str, Any]]:
                 requested.append(table)
-                result = rows if table == TableInternal.WIDGETS else []
+                result = rows if table == TableInternal.WIDGETS else workflows if table == TableInternal.WORKFLOWS else custom
                 self.system_table_counts[str(table)] = {"expected": len(result), "fetched": len(result)}
                 return result
 
@@ -212,18 +238,26 @@ class WidgetFetchTests(unittest.TestCase):
 
         self.assertEqual(requested, [TableInternal.WORKFLOWS, TableInternal.CUSTOM_SCRIPTS, TableInternal.WIDGETS])
         self.assertIn("### Widget 1: w-1\n\n**Type:** widgetNameFreeHtml\n**Version:** 7", content)
+        self.assertIn("### Workflow 2: offline workflow 1", content)
+        self.assertIn("### Custom Script 2: offline custom 1", content)
         self.assertEqual(show_stats.call_args.args[0].widgets, 1)
         self.assertEqual(completeness, {
             "version": 1, "status": "PASS", "appId": "app-1",
-            "tables": {"expected": 0, "tsdFetched": 0},
+            "tables": {"expected": 2, "tsdFetched": 2},
             "systemTables": {
-                "wascenarios": {"expected": 0, "fetched": 0},
-                "customScripts": {"expected": 0, "fetched": 0},
+                "wascenarios": {"expected": 2, "fetched": 2},
+                "customScripts": {"expected": 2, "fetched": 2},
                 WIDGETS_TABLE: {"expected": 1, "fetched": 1},
             },
-            "fragments": {"tableScripts": 0, "workflows": 0, "customScripts": 0, "widgets": 1},
+            "fragments": {"tableScripts": 0, "workflows": 2, "customScripts": 2, "widgets": 1},
         })
         self.assertEqual(len(ProgressStep), 7)
+
+        with TemporaryDirectory() as directory:
+            ui = Ui(Console(file=io.StringIO()))
+            with patch("tabidoo_llm_export.runner.TabidooApi", ExportApi), patch("tabidoo_llm_export.runner.LlmFormatter.format", return_value=""), self.assertRaisesRegex(ApiError, "Incomplete written"):
+                ExportRunner(ui, "https://example.invalid", "test", "en", 1, False).run("app-1", Path(directory), True)
+            self.assertFalse((Path(directory) / "export-completeness.json").exists())
 
 
 if __name__ == "__main__":

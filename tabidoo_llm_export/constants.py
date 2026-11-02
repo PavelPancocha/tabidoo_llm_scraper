@@ -164,6 +164,7 @@ class WorkflowStepType(StrEnum):
 
 
 class WidgetType(StrEnum):
+    FREE_HTML = "widgetNameFreeHtml"
     TEXT = "widgetNameText"
 
 

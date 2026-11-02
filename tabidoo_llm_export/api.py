@@ -113,11 +113,11 @@ class TabidooApi:
             body[ApiField.SCHEMA_ID] = schema_id
 
         payload = self._client.post_json(Endpoint.TSD, body)
-        if isinstance(payload, dict) and JsonKey.CONTENT in payload and isinstance(payload[JsonKey.CONTENT], str):
+        if isinstance(payload, dict) and JsonKey.CONTENT in payload and isinstance(payload[JsonKey.CONTENT], str) and payload[JsonKey.CONTENT].strip():
             return str(payload[JsonKey.CONTENT])
 
         unwrapped = JsonUnwrapper.unwrap(payload)
-        if isinstance(unwrapped, dict) and JsonKey.CONTENT in unwrapped and isinstance(unwrapped[JsonKey.CONTENT], str):
+        if isinstance(unwrapped, dict) and JsonKey.CONTENT in unwrapped and isinstance(unwrapped[JsonKey.CONTENT], str) and unwrapped[JsonKey.CONTENT].strip():
             return str(unwrapped[JsonKey.CONTENT])
 
         raise ApiError(Text.TSD_MISSING)
@@ -163,7 +163,10 @@ class TsdFetcher:
                     break
                 completed, unfinished = wait(pending, return_when=FIRST_COMPLETED)
                 for future in sorted(completed, key=pending.__getitem__):
-                    parts[pending.pop(future)][1].write_bytes(future.result().rstrip().encode(Encoding.UTF8))
+                    content = future.result()
+                    if not isinstance(content, str) or not content.strip():
+                        raise ApiError("Empty per-table TypeScript definition")
+                    parts[pending.pop(future)][1].write_bytes(content.rstrip().encode(Encoding.UTF8))
                 # Release completed futures before refilling either slot; output stays in input order.
                 del completed, unfinished, future
 
