@@ -266,6 +266,10 @@ class ScriptExtractor:
         extracted: list[ExtractedWorkflowCodeFragment] = list(CollectionDefaults.EMPTY)
         for record in workflows:
             fields = record.get(JsonKey.FIELDS)
+            # Legacy never-configured workflows come back without a `definition` key at all,
+            # but with their name; they hold no code. Any other missing/partial shape still fails.
+            if isinstance(fields, dict) and JsonKey.DEFINITION not in fields and isinstance(fields.get(JsonKey.NAME), str) and fields.get(JsonKey.NAME):
+                continue
             if not isinstance(fields, dict) or not isinstance(fields.get(JsonKey.DEFINITION), dict):
                 raise ApiError("Incomplete workflow fields/definition")
             name = str(fields.get(JsonKey.NAME, SanitizeDefaults.EMPTY))

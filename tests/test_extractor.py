@@ -293,3 +293,16 @@ class ScriptExtractorFieldScriptTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScriptExtractorLegacyWorkflowTests(unittest.TestCase):
+    def test_legacy_workflow_without_definition_key_is_skipped(self) -> None:
+        # Real PROD shape 2. 11. 2026 (3 never-configured legacy workflows).
+        row = {"fields": {"name": "Legacy", "log": "", "triggersNames": ["Time from table field (Contracts)"], "actionsNames": ["Send email"]}}
+        self.assertEqual(ScriptExtractor().extract_workflows([row]), [])
+
+    def test_missing_definition_without_name_still_fails(self) -> None:
+        from tabidoo_llm_export.errors import ApiError
+        for fields in ({}, {"name": ""}, {"log": "x"}, {"name": "x", "definition": None}):
+            with self.assertRaises(ApiError):
+                ScriptExtractor().extract_workflows([{"fields": fields}])
