@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import textwrap
 import time
+from http.client import RemoteDisconnected
 from typing import Any, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -119,7 +120,7 @@ class HttpClient:
             self._console.print(f"{method} {url}", style=Style.INFO)
 
         request = Request(url=url, method=method, headers=headers, data=data)
-        for attempt in range(3):
+        for attempt in range(4):
             try:
                 with urlopen(request, timeout=self._timeout_sec) as resp:
                     body = resp.read()
@@ -135,8 +136,8 @@ class HttpClient:
                 if status in (HttpStatus.UNAUTHORIZED, HttpStatus.FORBIDDEN):
                     raise AuthError(message) from exc
                 raise HttpStatusError(status, message) from exc
-            except URLError as exc:
-                if attempt == 2:
+            except (URLError, TimeoutError, ConnectionResetError, RemoteDisconnected) as exc:
+                if method != HttpMethod.GET or attempt == 3:
                     raise NetworkError(Text.NETWORK_ERROR.format(url=url, detail=exc)) from exc
                 time.sleep(0.5 * (attempt + 1))
 
